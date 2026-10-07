@@ -7,6 +7,29 @@ export interface Env {
   MAX_MESSAGE_BYTES: string;
 }
 
+// ALLOWED_ORIGINS entries may contain `*`, which matches any characters except `/` or `.`
+// (so one hostname label), e.g. https://tunnel-*-team.vercel.app.
+function matchOrigin(pattern: string, origin: string): boolean {
+  const parts = pattern.split("*");
+  if (parts.length === 1) return pattern === origin;
+  if (!origin.startsWith(parts[0])) return false;
+  let pos = parts[0].length;
+  for (let i = 1; i < parts.length; i++) {
+    const last = i === parts.length - 1;
+    const lit = parts[i];
+    // the wildcard consumes up to the next occurrence of `lit` (or to the end for the last part)
+    const idx = last ? origin.length - lit.length : origin.indexOf(lit, pos);
+    if (idx < pos || (last && !origin.endsWith(lit))) return false;
+    if (/[/.]/.test(origin.slice(pos, idx))) return false;
+    pos = idx + lit.length;
+  }
+  return pos === origin.length;
+}
+
+function originAllowed(origin: string, list: string): boolean {
+  return list.split(",").some((p) => p.trim() !== "" && matchOrigin(p.trim(), origin));
+}
+
 const ROOM_RE = /^[A-Za-z0-9_-]{22,64}$/; // >=128-bit base64url IDs
 
 export default {
@@ -20,8 +43,9 @@ export default {
       return new Response("Expected WebSocket", { status: 426 });
     }
     const origin = req.headers.get("Origin");
-    const allowed = env.ALLOWED_ORIGINS.split(",").map((s) => s.trim());
-    if (origin && !allowed.includes(origin)) return new Response("Forbidden", { status: 403 });
+    if (origin && !originAllowed(origin, env.ALLOWED_ORIGINS)) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
     return env.ROOM.get(env.ROOM.idFromName(m[1])).fetch(req);
   },

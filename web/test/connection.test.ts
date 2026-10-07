@@ -13,7 +13,7 @@ class FakeSocket implements SocketLike {
   close() { this.closed = true; }
 }
 
-function setup(extra: Partial<ConnectionOptions> = {}) {
+function setup(extra: Partial<ConnectionOptions> = {}, messages: string[] = []) {
   mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const sockets: FakeSocket[] = [];
   const resumeCbs: Array<() => void> = [];
@@ -22,6 +22,7 @@ function setup(extra: Partial<ConnectionOptions> = {}) {
   const conn = new RoomConnection({
     url: "wss://relay/ws/x",
     role: "host",
+    onMessage: (d) => messages.push(d),
     random: () => 0.5, // jitter factor 1.0
     onResume: (cb) => { resumeCbs.push(cb); return () => { resumeCbs.length = 0; }; },
     onStatus: (s) => statuses.push(s),
@@ -186,5 +187,43 @@ test("stop during a pending retry cancels it", () => {
   conn.stop();
   mock.timers.tick(60_000);
   assert.equal(sockets.length, 1);
+  mock.timers.reset();
+});
+
+test("send: false until open, then writes to the socket", () => {
+  const { conn, sockets } = setup();
+  assert.equal(conn.send("x"), false); // not started
+  conn.start();
+  assert.equal(conn.send("x"), false); // connecting
+  sockets[0].onopen!();
+  assert.equal(conn.send("hello"), true);
+  assert.equal(sockets[0].sent.at(-1), "hello");
+  sockets[0].onclose!();
+  assert.equal(conn.send("x"), false); // reconnecting
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("send reports false if the socket throws", () => {
+  const { conn, sockets } = setup();
+  conn.start();
+  sockets[0].onopen!();
+  sockets[0].send = () => { throw new Error("closing"); };
+  assert.equal(conn.send("x"), false);
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("peer frames reach onMessage; presence and pong do not", () => {
+  const messages: string[] = [];
+  const { conn, sockets } = setup({}, messages);
+  conn.start();
+  sockets[0].onopen!();
+  sockets[0].onmessage!({ data: "pong" });
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "presence", count: 2 }) });
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "text", id: "a", text: "hi", ts: 1 }) });
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /"text":"hi"/);
+  conn.stop();
   mock.timers.reset();
 });

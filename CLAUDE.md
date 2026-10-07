@@ -18,6 +18,9 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 - Client sends `{"type":"hello","role":"host"|"client"}` on every (re)connect. The relay consumes it (never forwards) and tracks the role per socket.
 - Relay sends `{"type":"presence","count":N}` where N = number of **distinct roles** present (0-2), so ghost sockets and second tabs don't read as a peer. `paired` = count 2.
 - `ping` -> `pong` is auto-answered by the relay (keepalive). Client frames of reserved types (`presence`, `hello`) are dropped by the relay so peers can't forge them. All other frames are forwarded verbatim to the other sockets in the room.
+- Peer messages (forwarded verbatim): `{"type":"text","id","text","ts"}` client -> host (text <= 100k chars, `MAX_TEXT_CHARS`), and `{"type":"ack","id","copied"}` host -> client. Validate with `parsePeerMessage`. The host stamps clips with its own clock (ignores the sender's `ts`).
+- Host history: last 30 clips (`MAX_CLIPS`) in IndexedDB (Dexie, `web/src/lib/clips.ts`), shown newest first with a Copy button each and a Clear button. All history changes go through `ClipStore` (`clip-store.ts`), a serial queue: never write to the DB from a handler directly, or concurrent messages will clobber each other.
+- Host auto-copies with `navigator.clipboard.writeText`; this fails when the tab is unfocused, so the clip still lands in the list with `copied:false` and the ack tells the phone to say "tap Copy on computer".
 - `RoomConnection` (`web/src/lib/connection.ts`) handles reconnect with jittered backoff, heartbeat/dead-link detection, and immediate reconnect on tab-visible/online/pageshow.
 - Known accepted risk: the Room ID is in the WebSocket URL path (`/ws/<room>`), so the relay/Cloudflare logs and TLS-inspecting proxies can see it. Possession of it = access to the room. Real fix is end-to-end encryption keyed from the URL fragment; not built yet.
 

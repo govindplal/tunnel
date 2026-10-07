@@ -20,6 +20,8 @@ export interface ConnectionOptions {
   onStatus: (s: Status) => void;
   /** Number of sockets in the room, including this one. */
   onPresence: (count: number) => void;
+  /** Any non-server text frame from the other device. */
+  onMessage?: (data: string) => void;
   socketFactory?: (url: string) => SocketLike;
   pingMs?: number;
   maxBackoffMs?: number;
@@ -68,6 +70,17 @@ export class RoomConnection {
     this.attempts = 0;
     this.unsubResume = (this.opts.onResume ?? browserResume)(() => this.resume());
     this.connect();
+  }
+
+  /** Sends a text frame; false if the socket isn't open. */
+  send(data: string): boolean {
+    if (!this.ws || this.status !== "open") return false;
+    try {
+      this.ws.send(data);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Timers freeze in suspended tabs, so on resume verify the link instead of waiting for them. */
@@ -143,6 +156,7 @@ export class RoomConnection {
       this.lastSeen = Date.now();
       const m = parseServerMessage(e.data);
       if (m?.type === "presence") this.opts.onPresence(m.count);
+      else if (!m && typeof e.data === "string" && e.data !== "pong") this.opts.onMessage?.(e.data);
     };
     const lost = () => {
       if (this.ws !== ws) return;

@@ -11,3 +11,43 @@ test("parses presence, ignores everything else", () => {
   assert.equal(parseServerMessage('{"type":"other"}'), null);
   assert.equal(parseServerMessage(new ArrayBuffer(4)), null);
 });
+
+import { MAX_FRAME_CHARS, MAX_TEXT_CHARS, parsePeerMessage, newMessageId } from "../src/lib/protocol.ts";
+
+test("parsePeerMessage accepts text and ack", () => {
+  assert.deepEqual(
+    parsePeerMessage(JSON.stringify({ type: "text", id: "a", text: "hi", ts: 5 })),
+    { type: "text", id: "a", text: "hi", ts: 5 },
+  );
+  assert.deepEqual(parsePeerMessage('{"type":"ack","id":"a","copied":true}'), { type: "ack", id: "a", copied: true });
+});
+
+test("parsePeerMessage rejects malformed, oversized, and wrong-typed input", () => {
+  assert.equal(parsePeerMessage("plain text"), null);
+  assert.equal(parsePeerMessage("{not json"), null);
+  assert.equal(parsePeerMessage('{"type":"text","text":"x"}'), null); // no id
+  assert.equal(parsePeerMessage(`{"type":"text","id":"${"i".repeat(65)}","text":"x"}`), null);
+  assert.equal(parsePeerMessage('{"type":"text","id":"a","text":5}'), null);
+  assert.equal(parsePeerMessage('{"type":"ack","id":"a","copied":"yes"}'), null);
+  assert.equal(parsePeerMessage('{"type":"other","id":"a"}'), null);
+  const big = JSON.stringify({ type: "text", id: "a", text: "x".repeat(MAX_TEXT_CHARS + 1) });
+  assert.equal(parsePeerMessage(big), null);
+  assert.equal(parsePeerMessage(42), null);
+});
+
+test("text is preserved exactly (unicode, newlines, quotes)", () => {
+  const text = 'line1\nline2 "quoted" \u{1F600} \ done';
+  const m = parsePeerMessage(JSON.stringify({ type: "text", id: "a", text, ts: 1 }));
+  assert.equal(m?.type === "text" && m.text, text);
+});
+
+test("newMessageId is unique", () => {
+  assert.notEqual(newMessageId(), newMessageId());
+});
+
+test("worst-case escaped text still fits the frame limit and parses", () => {
+  const text = String.fromCharCode(1).repeat(MAX_TEXT_CHARS); // control chars escape to 6 chars each
+  const frame = JSON.stringify({ type: "text", id: "a", text, ts: 1 });
+  assert.ok(frame.length <= MAX_FRAME_CHARS);
+  assert.equal(parsePeerMessage(frame)?.type, "text");
+});

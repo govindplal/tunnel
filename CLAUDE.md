@@ -6,47 +6,24 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 - **Cloud is a stateless relay.** The backend routes WebSocket frames between room members and **never persists** payloads (no disk, no DB, no logs of content). Durable Objects hold only live sockets in memory, no storage.
 - **Host (laptop) is the stateful side.** Files live only in the Host browser's IndexedDB, tagged by Room ID. Client (phone) stores nothing but the Room ID.
 - **Room ID** = cryptographically secure random (`crypto.getRandomValues`, >=128 bits), saved in `localStorage` on both devices for auto-resume. Possession of the ID is the only auth, so treat it as a secret: never log it, never put it in analytics.
-- **Roles:** Host = opens app first, shows QR (URL + Room ID). Client = scans QR.
-
-## Flows
-1. **Pairing:** Host generates Room ID, renders QR; Client scans, both join the WebSocket room.
-2. **Text wormhole:** Client `navigator.clipboard.readText()` -> WS -> relay -> Host `navigator.clipboard.writeText()`.
-3. **File casting:** Client reads file, streams **chunks** over WS -> Host reassembles Blob -> writes to IndexedDB -> renders (PDF.js for PDFs, `<img>`/canvas for media) -> adds thumbnail to the "Stash" sidebar. Stash repopulates from IndexedDB on reload.
-4. **Reverse sync:** Client requests a stashed file; Host reads IndexedDB and streams it back.
-
-## Wire protocol (relay <-> clients)
-- Client sends `{"type":"hello","role":"host"|"client"}` on every (re)connect. The relay consumes it (never forwards) and tracks the role per socket.
-- Relay sends `{"type":"presence","count":N}` where N = number of **distinct roles** present (0-2), so ghost sockets and second tabs don't read as a peer. `paired` = count 2.
-- `ping` -> `pong` is auto-answered by the relay (keepalive). Client frames of reserved types (`presence`, `hello`) are dropped by the relay so peers can't forge them. All other frames are forwarded verbatim to the other sockets in the room.
-- Peer messages (forwarded verbatim): `{"type":"text","id","text","ts"}` client -> host (text <= 100k chars, `MAX_TEXT_CHARS`), and `{"type":"ack","id","copied"}` host -> client. Validate with `parsePeerMessage`. The host stamps clips with its own clock (ignores the sender's `ts`).
-- Host history: last 30 clips (`MAX_CLIPS`) in IndexedDB (Dexie, `web/src/lib/clips.ts`), shown newest first with a Copy button each and a Clear button. All history changes go through `ClipStore` (`clip-store.ts`), a serial queue: never write to the DB from a handler directly, or concurrent messages will clobber each other.
-- File casting (phone -> laptop): control messages are JSON text (`file-start {id,name,mime,size,chunks}`, `file-ack {id,ok,reason?}`, `file-abort {id}`; validate with `parseFileMessage`); data is binary frames `[16-byte uuid][4-byte BE chunk index][<=64 KB payload]` (`encodeChunk`/`decodeChunk`). Limits: 25 MB per file (`MAX_FILE_BYTES`), max 2 concurrent incoming transfers, 60 s idle timeout per transfer on the host. Sender (`sendFile`) applies backpressure on `bufferedAmount`, reports only transmitted bytes as progress, and resolves only when the socket has drained (data has left the phone, NOT arrived: relay delivery lags well behind); it aborts only if the queue stops shrinking for 30 s. The host sends `file-progress {id,received}` at most once a second so the phone shows real arrival progress; the phone fails a transfer only after 30 s with no progress/ack (`STALL_TIMEOUT_MS`), and a late ok ack still turns a timed-out transfer into delivered. `FileReceiver` tolerates duplicate/out-of-order chunks and rejects malformed ones. Over a real link delivery time varies a lot (3 MB took 1-10 s), so never treat "queued" as "delivered": wait for `file-ack`.
-- Host stash: files live in IndexedDB (`files` table, Dexie v2 in `db.ts`), capped at 20 files / 200 MB (`pickEvictions`), changes serialized through `FileStore`/`SerialQueue`. Phone-side transfer states are a pure reducer (`transfer-state.ts`): files send one at a time (queued), a dropped connection fails queued/sending transfers immediately, and terminal states can't be overwritten by late events.
-- Host auto-copies with `navigator.clipboard.writeText`; this fails when the tab is unfocused, so the clip still lands in the list with `copied:false` and the ack tells the phone to say "tap Copy on computer".
-- `RoomConnection` (`web/src/lib/connection.ts`) handles reconnect with jittered backoff, heartbeat/dead-link detection, and immediate reconnect on tab-visible/online/pageshow.
 - Known accepted risk: the Room ID is in the WebSocket URL path (`/ws/<room>`), so the relay/Cloudflare logs and TLS-inspecting proxies can see it. Possession of it = access to the room. Real fix is end-to-end encryption keyed from the URL fragment; not built yet.
 
+## Built vs still to build
+Pairing, text wormhole, and file transfer + stash are built. Protocol and storage details are in `web/src/lib/CLAUDE.md` (client) and `relay-worker/CLAUDE.md` (relay). Still to build:
+- **File viewing:** Host renders received files (PDF.js for PDFs, `<img>`/canvas for media) and shows thumbnails in a "Stash" sidebar.
+- **Reverse sync:** Client requests a stashed file; Host reads IndexedDB and streams it back.
+
 ## Stack (decided)
-- `web/` - **Next.js 16** (App Router, TypeScript, Tailwind, `src/` dir), Dexie (IndexedDB), pdfjs-dist, qrcode.react. NOTE: this Next.js has breaking changes; read `web/node_modules/next/dist/docs/` before writing Next code (see `web/AGENTS.md`).
-- `relay-worker/` - **Cloudflare Worker + Durable Objects** (TypeScript, `src/index.ts`): one `Room` DO per room ID relays WebSocket frames (hibernation API, ping/pong auto-response, size cap, origin allowlist). Replaces the earlier FastAPI/Redis relay; `relay/` is the legacy prototype kept for reference until removed.
+- `web/` - Next.js 16. NOTE: this Next.js has breaking changes; read `web/node_modules/next/dist/docs/` before writing Next code (see `web/AGENTS.md`).
+- `relay-worker/` - Cloudflare Worker + Durable Objects. `relay/` is the legacy FastAPI/Redis prototype, kept for reference until removed.
 - Test devices: Host = ASUS ROG Strix G15 (corp Wi-Fi/VPN); Client = Nothing Phone 4a Pro (cellular)
 
 ## Commands
-- Web install: `cd web && npm install`
-- Web dev: `cd web && npm run dev` (http://localhost:3000)
-- Web test: `cd web && npm test` (node:test, type-stripping: no enums/parameter properties in `src/lib`)
-- Web lint / typecheck / build: `cd web && npm run lint` / `npx tsc --noEmit` / `npm run build`
-- Relay dev: `cd relay-worker && npm run dev` (ws://localhost:8787)
-- Relay typecheck / test: `cd relay-worker && npm run typecheck` / `npm test` (smoke test; needs `npm run dev` running)
-- Relay deploy: `cd relay-worker && npm run deploy` (needs `wrangler login`)
-- Legacy FastAPI relay (`relay/`): `cd relay && .venv/Scripts/python -m pytest -q`
+- Web test: `cd web && npm test` (node:test with type-stripping: no enums/parameter properties in `src/lib`)
 - Phone testing: use the live Vercel URL (HTTPS) with the deployed Worker (wss). `localhost` is unreachable from the phone on cellular.
+- Relay commands: see `relay-worker/CLAUDE.md`.
 
 ## Conventions
-- TypeScript strict on the frontend; type all WS message shapes in one shared schema (discriminated union on `type`) and validate on both ends.
-- Binary frames for file chunks (not base64 JSON). Include `fileId`, `seq`, `total`, and handle out-of-order/dropped/duplicate chunks and backpressure (`bufferedAmount`).
-- Enforce message/file size limits and rate limits in the relay; reject unknown room IDs cleanly.
-- Match surrounding code style; small focused changes; add tests with every behavior change.
 - Never commit secrets; config in `.env` (gitignored), keys documented in `.env.example`.
 
 ## Gotchas

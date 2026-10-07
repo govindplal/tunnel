@@ -47,4 +47,6 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 ## Workflow
 - Explore and plan before non-trivial edits; use `/start-feature` and `/fix-bug`.
 - Run tests/lint and report real results before calling work done.
+- **Ship every checkpoint:** after each completed feature or checkpoint (tests/lint green), commit and `git push` to `origin` (github.com/govindplal/tunnel). Vercel auto-deploys `web/` on every push; the user reviews the live site, not localhost. After pushing, confirm the deployment reached READY (Vercel `list_deployments`/`get_deployment` or `vercel ls`) and give the user the live URL. If a build fails, fix it before moving on.
+- Vercel project `tunnel` (team govindplals-projects), root directory `web`. Vercel cannot host the FastAPI WebSocket relay; it needs a separate always-on host + Redis (not yet chosen). Web reads the relay from `NEXT_PUBLIC_RELAY_URL` (set in Vercel env vars).
 - Ask before: adding dependencies, changing the WS protocol, or anything that adds server-side persistence.

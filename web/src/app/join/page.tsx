@@ -1,6 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
+import { TransferList } from "@/components/TransferList";
+import { useFileOutbox } from "@/hooks/useFileOutbox";
 import { useRoom } from "@/hooks/useRoom";
 import { MAX_FRAME_CHARS, MAX_TEXT_CHARS, newMessageId, parsePeerMessage } from "@/lib/protocol";
 import { loadRoomId, parseRoomFromHash, saveRoomId } from "@/lib/room";
@@ -23,7 +25,12 @@ export default function JoinPage() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<Sent[]>([]);
 
-  const onMessage = useCallback((data: string) => {
+  // The outbox needs `send` from useRoom, which needs this handler: link them through a ref.
+  const fileHandler = useRef<(d: string | ArrayBuffer) => boolean>(() => false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const onMessage = useCallback((data: string | ArrayBuffer) => {
+    if (fileHandler.current(data) || typeof data !== "string") return;
     const m = parsePeerMessage(data);
     if (m?.type !== "ack") return;
     setSent((list) =>
@@ -31,7 +38,11 @@ export default function JoinPage() {
     );
   }, []);
 
-  const { status, paired, send } = useRoom(room, "client", onMessage);
+  const { status, paired, send, buffered } = useRoom(room, "client", onMessage);
+  const outbox = useFileOutbox(send, buffered, paired);
+  useEffect(() => {
+    fileHandler.current = outbox.handleMessage;
+  }, [outbox.handleMessage]);
 
   useEffect(() => {
     const fromUrl = parseRoomFromHash(window.location.hash);
@@ -102,6 +113,25 @@ export default function JoinPage() {
           >
             Send clipboard
           </button>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const picked = Array.from(e.target.files ?? []);
+              e.target.value = ""; // lets the same file be picked again
+              if (picked.length) void outbox.sendFiles(picked);
+            }}
+          />
+          <button
+            onClick={() => fileInput.current?.click()}
+            disabled={!paired}
+            className="rounded-lg border border-zinc-400 px-4 py-2 disabled:opacity-40 dark:border-zinc-600"
+          >
+            Send file
+          </button>
+          <TransferList transfers={outbox.transfers} onCancel={outbox.cancel} onDismiss={outbox.dismiss} />
           <div className="flex w-full flex-col gap-2">
             <textarea
               value={draft}

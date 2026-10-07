@@ -3,8 +3,11 @@ import { parseServerMessage } from "./protocol.ts";
 export type Status = "connecting" | "open" | "reconnecting" | "closed";
 
 export interface SocketLike {
-  send(data: string): void;
+  send(data: string | Uint8Array): void;
   close(): void;
+  binaryType?: string;
+  /** bytes queued but not yet transmitted */
+  bufferedAmount?: number;
   onopen: (() => void) | null;
   onclose: (() => void) | null;
   onmessage: ((e: { data: unknown }) => void) | null;
@@ -21,7 +24,7 @@ export interface ConnectionOptions {
   /** Number of sockets in the room, including this one. */
   onPresence: (count: number) => void;
   /** Any non-server text frame from the other device. */
-  onMessage?: (data: string) => void;
+  onMessage?: (data: string | ArrayBuffer) => void;
   socketFactory?: (url: string) => SocketLike;
   pingMs?: number;
   maxBackoffMs?: number;
@@ -73,7 +76,7 @@ export class RoomConnection {
   }
 
   /** Sends a text frame; false if the socket isn't open. */
-  send(data: string): boolean {
+  send(data: string | Uint8Array): boolean {
     if (!this.ws || this.status !== "open") return false;
     try {
       this.ws.send(data);
@@ -81,6 +84,11 @@ export class RoomConnection {
     } catch {
       return false;
     }
+  }
+
+  /** Bytes queued in the socket but not yet on the wire (for backpressure). */
+  bufferedAmount(): number {
+    return this.ws?.bufferedAmount ?? 0;
   }
 
   /** Timers freeze in suspended tabs, so on resume verify the link instead of waiting for them. */
@@ -125,7 +133,13 @@ export class RoomConnection {
 
   private connect(): void {
     this.setStatus(this.attempts === 0 ? "connecting" : "reconnecting");
-    const make = this.opts.socketFactory ?? ((u: string) => new WebSocket(u) as unknown as SocketLike);
+    const make =
+      this.opts.socketFactory ??
+      ((u: string) => {
+        const s = new WebSocket(u);
+        s.binaryType = "arraybuffer"; // file chunks arrive as ArrayBuffer, not Blob
+        return s as unknown as SocketLike;
+      });
     let ws: SocketLike;
     try {
       ws = make(this.opts.url);
@@ -156,7 +170,9 @@ export class RoomConnection {
       this.lastSeen = Date.now();
       const m = parseServerMessage(e.data);
       if (m?.type === "presence") this.opts.onPresence(m.count);
-      else if (!m && typeof e.data === "string" && e.data !== "pong") this.opts.onMessage?.(e.data);
+      else if (!m && e.data !== "pong" && (typeof e.data === "string" || e.data instanceof ArrayBuffer)) {
+        this.opts.onMessage?.(e.data);
+      }
     };
     const lost = () => {
       if (this.ws !== ws) return;

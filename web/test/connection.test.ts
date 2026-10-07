@@ -13,7 +13,7 @@ class FakeSocket implements SocketLike {
   close() { this.closed = true; }
 }
 
-function setup(extra: Partial<ConnectionOptions> = {}, messages: string[] = []) {
+function setup(extra: Partial<ConnectionOptions> = {}, messages: Array<string | ArrayBuffer> = []) {
   mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const sockets: FakeSocket[] = [];
   const resumeCbs: Array<() => void> = [];
@@ -215,7 +215,7 @@ test("send reports false if the socket throws", () => {
 });
 
 test("peer frames reach onMessage; presence and pong do not", () => {
-  const messages: string[] = [];
+  const messages: Array<string | ArrayBuffer> = [];
   const { conn, sockets } = setup({}, messages);
   conn.start();
   sockets[0].onopen!();
@@ -223,7 +223,7 @@ test("peer frames reach onMessage; presence and pong do not", () => {
   sockets[0].onmessage!({ data: JSON.stringify({ type: "presence", count: 2 }) });
   sockets[0].onmessage!({ data: JSON.stringify({ type: "text", id: "a", text: "hi", ts: 1 }) });
   assert.equal(messages.length, 1);
-  assert.match(messages[0], /"text":"hi"/);
+  assert.match(String(messages[0]), /"text":"hi"/);
   conn.stop();
   mock.timers.reset();
 });

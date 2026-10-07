@@ -94,8 +94,10 @@ export class Room implements DurableObject {
   private safeSend(s: WebSocket, msg: string | ArrayBuffer): void {
     try {
       s.send(msg);
-    } catch {
-      // peer is closing; its own close handler updates the others
+    } catch (e) {
+      // Usually a closing peer, whose own close handler updates the others. Log only the
+      // error text (never the payload) so a dropped frame is visible in `wrangler tail`.
+      console.error("send failed:", e instanceof Error ? e.message : String(e));
     }
   }
 

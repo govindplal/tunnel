@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { ClipList } from "@/components/ClipList";
+import { FileList } from "@/components/FileList";
+import { useFileInbox } from "@/hooks/useFileInbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useRoom } from "@/hooks/useRoom";
 import { ClipStore } from "@/lib/clip-store";
@@ -15,6 +17,8 @@ export default function HostPage() {
   const [room, setRoom] = useState<string | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
   const sendRef = useRef<(d: string) => boolean>(() => false);
+  // The inbox needs `send` from useRoom, which needs this handler: link them through a ref.
+  const fileHandler = useRef<(d: string | ArrayBuffer) => boolean>(() => false);
   // All history changes go through one queue so quick bursts can't overwrite each other.
   const store = useMemo(
     () => new ClipStore({ load: listClips, save: saveClip, clear: clearClips, onChange: setClips }),
@@ -22,7 +26,8 @@ export default function HostPage() {
   );
 
   const onMessage = useCallback(
-    (data: string) => {
+    (data: string | ArrayBuffer) => {
+      if (fileHandler.current(data) || typeof data !== "string") return;
       const m = parsePeerMessage(data);
       if (m?.type !== "text") return;
       void store.receive(
@@ -47,6 +52,10 @@ export default function HostPage() {
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
+  const inbox = useFileInbox(send, paired);
+  useEffect(() => {
+    fileHandler.current = inbox.handleMessage;
+  }, [inbox.handleMessage]);
 
   useEffect(() => {
     // localStorage / IndexedDB are only readable in the browser, after hydration.
@@ -82,6 +91,7 @@ export default function HostPage() {
       )}
       <StatusBadge status={status} paired={paired} />
       <ClipList clips={clips} onClear={() => void store.clear()} />
+      <FileList files={inbox.files} incoming={inbox.incoming} onRemove={inbox.remove} onClear={inbox.clear} />
       <button onClick={newRoom} className="text-sm underline text-zinc-600 dark:text-zinc-400">
         Start a new pairing
       </button>

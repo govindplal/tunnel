@@ -5,7 +5,7 @@ import { RoomConnection, type Role, type Status } from "@/lib/connection";
 const RELAY = process.env.NEXT_PUBLIC_RELAY_URL ?? "ws://localhost:8787";
 
 /** Keeps a live connection to `room`; `paired` is true when another device is in it. */
-export function useRoom(room: string | null, role: Role, onMessage?: (data: string) => void) {
+export function useRoom(room: string | null, role: Role, onMessage?: (data: string | ArrayBuffer) => void) {
   const [status, setStatus] = useState<Status>("closed");
   const [peers, setPeers] = useState(0);
   const conn = useRef<RoomConnection | null>(null);
@@ -31,6 +31,7 @@ export function useRoom(room: string | null, role: Role, onMessage?: (data: stri
     };
   }, [room, role]);
 
-  const send = useCallback((data: string) => conn.current?.send(data) ?? false, []);
-  return { status, paired: status === "open" && peers >= 2, send };
+  const send = useCallback((data: string | Uint8Array) => conn.current?.send(data) ?? false, []);
+  const buffered = useCallback(() => conn.current?.bufferedAmount() ?? 0, []);
+  return { status, paired: status === "open" && peers >= 2, send, buffered };
 }

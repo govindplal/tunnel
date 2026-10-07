@@ -3,7 +3,7 @@
 Zero-install web bridge between a phone (cellular) and a locked-down corporate laptop (Wi-Fi/VPN, P2P blocked). Phone sends text/files; laptop receives, renders, and stores them. Built to leave no footprint in enterprise tools and avoid DLP flags.
 
 ## Architecture (non-negotiable principles)
-- **Cloud is a stateless relay.** The backend routes WebSocket frames between room members and **never persists** payloads (no disk, no DB, no logs of content). Redis is Pub/Sub only, no storage.
+- **Cloud is a stateless relay.** The backend routes WebSocket frames between room members and **never persists** payloads (no disk, no DB, no logs of content). Durable Objects hold only live sockets in memory, no storage.
 - **Host (laptop) is the stateful side.** Files live only in the Host browser's IndexedDB, tagged by Room ID. Client (phone) stores nothing but the Room ID.
 - **Room ID** = cryptographically secure random (`crypto.getRandomValues`, >=128 bits), saved in `localStorage` on both devices for auto-resume. Possession of the ID is the only auth, so treat it as a secret: never log it, never put it in analytics.
 - **Roles:** Host = opens app first, shows QR (URL + Room ID). Client = scans QR.
@@ -16,18 +16,18 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 
 ## Stack (decided)
 - `web/` - **Next.js 16** (App Router, TypeScript, Tailwind, `src/` dir), Dexie (IndexedDB), pdfjs-dist, qrcode.react. NOTE: this Next.js has breaking changes; read `web/node_modules/next/dist/docs/` before writing Next code (see `web/AGENTS.md`).
-- `relay/` - **FastAPI + WebSockets + Redis Pub/Sub** (`app/main.py`, `app/bus.py`). With `REDIS_URL` unset it uses an in-memory bus (dev/tests only, single process).
+- `relay-worker/` - **Cloudflare Worker + Durable Objects** (TypeScript, `src/index.ts`): one `Room` DO per room ID relays WebSocket frames (hibernation API, ping/pong auto-response, size cap, origin allowlist). Replaces the earlier FastAPI/Redis relay; `relay/` is the legacy prototype kept for reference until removed.
 - Test devices: Host = ASUS ROG Strix G15 (corp Wi-Fi/VPN); Client = Nothing Phone 4a Pro (cellular)
 
 ## Commands
 - Web install: `cd web && npm install`
 - Web dev: `cd web && npm run dev` (http://localhost:3000)
 - Web lint / typecheck / build: `cd web && npm run lint` / `npx tsc --noEmit` / `npm run build`
-- Relay setup: `cd relay && python -m venv .venv && .venv/Scripts/python -m pip install -r requirements-dev.txt`
-- Relay dev: `cd relay && .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000`
-- Relay test / lint: `cd relay && .venv/Scripts/python -m pytest -q` / `.venv/Scripts/python -m ruff check .`
-- Redis (optional locally): run inside WSL (`sudo apt install redis-server && redis-server`), then set `REDIS_URL=redis://localhost:6379/0`. No Docker on this machine.
-- Phone testing needs HTTPS reachable from cellular (e.g. a tunnel to web and relay); `localhost` won't work from the phone.
+- Relay dev: `cd relay-worker && npm run dev` (ws://localhost:8787)
+- Relay typecheck / test: `cd relay-worker && npm run typecheck` / `npm test` (smoke test; needs `npm run dev` running)
+- Relay deploy: `cd relay-worker && npm run deploy` (needs `wrangler login`)
+- Legacy FastAPI relay (`relay/`): `cd relay && .venv/Scripts/python -m pytest -q`
+- Phone testing: use the live Vercel URL (HTTPS) with the deployed Worker (wss). `localhost` is unreachable from the phone on cellular.
 
 ## Conventions
 - TypeScript strict on the frontend; type all WS message shapes in one shared schema (discriminated union on `type`) and validate on both ends.
@@ -48,5 +48,5 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 - Explore and plan before non-trivial edits; use `/start-feature` and `/fix-bug`.
 - Run tests/lint and report real results before calling work done.
 - **Ship every checkpoint:** after each completed feature or checkpoint (tests/lint green), commit and `git push` to `origin` (github.com/govindplal/tunnel). Vercel auto-deploys `web/` on every push; the user reviews the live site, not localhost. After pushing, confirm the deployment reached READY (Vercel `list_deployments`/`get_deployment` or `vercel ls`) and give the user the live URL. If a build fails, fix it before moving on.
-- Vercel project `tunnel` (team govindplals-projects), root directory `web`. Vercel cannot host the FastAPI WebSocket relay; it needs a separate always-on host + Redis (not yet chosen). Web reads the relay from `NEXT_PUBLIC_RELAY_URL` (set in Vercel env vars).
+- Vercel project `tunnel` (team govindplals-projects), root directory `web`. Vercel can't hold WebSockets, so the relay runs on Cloudflare (`tunnel-relay` Worker). Web reads the relay from `NEXT_PUBLIC_RELAY_URL` (set in Vercel env vars).
 - Ask before: adding dependencies, changing the WS protocol, or anything that adds server-side persistence.

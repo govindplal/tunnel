@@ -1,0 +1,13 @@
+{
+  "name": "tunnel-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "vars": {
+    "ALLOWED_ORIGINS": "http://localhost:3000",
+    "MAX_MESSAGE_BYTES": "1048576"
+  }
+}

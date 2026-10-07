@@ -27,6 +27,21 @@ export default {
   },
 };
 
+type Role = "host" | "client";
+const ROLES: Role[] = ["host", "client"];
+// Frame types only the relay may originate; clients can't forge them.
+const RESERVED = new Set(["presence", "hello"]);
+
+function frameType(msg: string | ArrayBuffer): string | null {
+  if (typeof msg !== "string" || msg.length > 256 || !msg.startsWith("{")) return null;
+  try {
+    const t = JSON.parse(msg)?.type;
+    return typeof t === "string" ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 export class Room implements DurableObject {
   constructor(private ctx: DurableObjectState, private env: Env) {
     // Answered without waking the object: keeps proxies from idling the socket out.
@@ -39,18 +54,58 @@ export class Room implements DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  // Presence = number of distinct roles (host/client) present, so ghost sockets
+  // from a dropped link or a second tab of the same role never read as a peer.
+  private broadcastPresence(closing?: WebSocket): void {
+    const sockets = this.ctx.getWebSockets().filter((s) => s !== closing);
+    const roles = new Set<Role>();
+    for (const s of sockets) {
+      const r = (s.deserializeAttachment() as { role?: Role } | null)?.role;
+      if (r) roles.add(r);
+    }
+    const msg = JSON.stringify({ type: "presence", count: roles.size });
+    for (const s of sockets) this.safeSend(s, msg);
+  }
+
+  private safeSend(s: WebSocket, msg: string | ArrayBuffer): void {
+    try {
+      s.send(msg);
+    } catch {
+      // peer is closing; its own close handler updates the others
+    }
+  }
+
   webSocketMessage(ws: WebSocket, msg: string | ArrayBuffer): void {
     const size = typeof msg === "string" ? new TextEncoder().encode(msg).byteLength : msg.byteLength;
     if (size > Number(this.env.MAX_MESSAGE_BYTES)) {
       ws.close(1009, "message too big");
       return;
     }
+    const type = frameType(msg);
+    if (type === "hello") {
+      const role = JSON.parse(msg as string).role;
+      if (ROLES.includes(role)) {
+        ws.serializeAttachment({ role });
+        this.broadcastPresence();
+      }
+      return;
+    }
+    if (type && RESERVED.has(type)) return; // drop forged server frames
     for (const peer of this.ctx.getWebSockets()) {
-      if (peer !== ws) peer.send(msg);
+      if (peer !== ws) this.safeSend(peer, msg);
     }
   }
 
   webSocketClose(ws: WebSocket, code: number): void {
-    ws.close(code === 1005 || code === 1006 ? 1000 : code);
+    try {
+      ws.close(code === 1005 || code === 1006 ? 1000 : code);
+    } catch {
+      // already closed
+    }
+    this.broadcastPresence(ws);
+  }
+
+  webSocketError(ws: WebSocket): void {
+    this.broadcastPresence(ws);
   }
 }

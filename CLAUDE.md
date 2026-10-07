@@ -14,6 +14,13 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 3. **File casting:** Client reads file, streams **chunks** over WS -> Host reassembles Blob -> writes to IndexedDB -> renders (PDF.js for PDFs, `<img>`/canvas for media) -> adds thumbnail to the "Stash" sidebar. Stash repopulates from IndexedDB on reload.
 4. **Reverse sync:** Client requests a stashed file; Host reads IndexedDB and streams it back.
 
+## Wire protocol (relay <-> clients)
+- Client sends `{"type":"hello","role":"host"|"client"}` on every (re)connect. The relay consumes it (never forwards) and tracks the role per socket.
+- Relay sends `{"type":"presence","count":N}` where N = number of **distinct roles** present (0-2), so ghost sockets and second tabs don't read as a peer. `paired` = count 2.
+- `ping` -> `pong` is auto-answered by the relay (keepalive). Client frames of reserved types (`presence`, `hello`) are dropped by the relay so peers can't forge them. All other frames are forwarded verbatim to the other sockets in the room.
+- `RoomConnection` (`web/src/lib/connection.ts`) handles reconnect with jittered backoff, heartbeat/dead-link detection, and immediate reconnect on tab-visible/online/pageshow.
+- Known accepted risk: the Room ID is in the WebSocket URL path (`/ws/<room>`), so the relay/Cloudflare logs and TLS-inspecting proxies can see it. Possession of it = access to the room. Real fix is end-to-end encryption keyed from the URL fragment; not built yet.
+
 ## Stack (decided)
 - `web/` - **Next.js 16** (App Router, TypeScript, Tailwind, `src/` dir), Dexie (IndexedDB), pdfjs-dist, qrcode.react. NOTE: this Next.js has breaking changes; read `web/node_modules/next/dist/docs/` before writing Next code (see `web/AGENTS.md`).
 - `relay-worker/` - **Cloudflare Worker + Durable Objects** (TypeScript, `src/index.ts`): one `Room` DO per room ID relays WebSocket frames (hibernation API, ping/pong auto-response, size cap, origin allowlist). Replaces the earlier FastAPI/Redis relay; `relay/` is the legacy prototype kept for reference until removed.
@@ -22,6 +29,7 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 ## Commands
 - Web install: `cd web && npm install`
 - Web dev: `cd web && npm run dev` (http://localhost:3000)
+- Web test: `cd web && npm test` (node:test, type-stripping: no enums/parameter properties in `src/lib`)
 - Web lint / typecheck / build: `cd web && npm run lint` / `npx tsc --noEmit` / `npm run build`
 - Relay dev: `cd relay-worker && npm run dev` (ws://localhost:8787)
 - Relay typecheck / test: `cd relay-worker && npm run typecheck` / `npm test` (smoke test; needs `npm run dev` running)

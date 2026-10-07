@@ -1,4 +1,4 @@
-import { parseServerMessage } from "./protocol.ts";
+import { parseServerMessage, type ServerMessage } from "./protocol.ts";
 
 export type Status = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -20,9 +20,13 @@ export interface ConnectionOptions {
   url: string;
   /** Announced to the relay on every (re)connect so presence counts distinct roles. */
   role: Role;
+  /** Proof that this device knows the room secret (see crypto.ts); sent in every hello. */
+  token: string;
   onStatus: (s: Status) => void;
   /** Number of sockets in the room, including this one. */
   onPresence: (count: number) => void;
+  /** The relay held, delivered or rejected one of our messages. */
+  onNotice?: (m: Exclude<ServerMessage, { type: "presence" }>) => void;
   /** Any non-server text frame from the other device. */
   onMessage?: (data: string | ArrayBuffer) => void;
   socketFactory?: (url: string) => SocketLike;
@@ -154,8 +158,9 @@ export class RoomConnection {
     ws.onopen = () => {
       this.attempts = 0;
       this.lastSeen = Date.now();
-      this.setStatus("open");
-      ws.send(JSON.stringify({ type: "hello", role: this.opts.role }));
+      // Not "open" yet: the relay verifies the hello asynchronously and drops anything sent before
+      // that. We are open once it answers with the first presence frame.
+      ws.send(JSON.stringify({ type: "hello", role: this.opts.role, token: this.opts.token }));
       this.beat = setInterval(() => {
         if (Date.now() - this.lastSeen > this.pingMs * 2) {
           ws.close(); // no pong for two intervals: link is dead; its close event may never come
@@ -169,7 +174,10 @@ export class RoomConnection {
       if (this.ws !== ws) return;
       this.lastSeen = Date.now();
       const m = parseServerMessage(e.data);
-      if (m?.type === "presence") this.opts.onPresence(m.count);
+      if (m?.type === "presence") {
+        if (this.status !== "open") this.setStatus("open"); // the relay has accepted our membership proof
+        this.opts.onPresence(m.count);
+      } else if (m) this.opts.onNotice?.(m);
       else if (!m && e.data !== "pong" && (typeof e.data === "string" || e.data instanceof ArrayBuffer)) {
         this.opts.onMessage?.(e.data);
       }

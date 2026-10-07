@@ -13,6 +13,12 @@ class FakeSocket implements SocketLike {
   close() { this.closed = true; }
 }
 
+/** A socket that has opened AND been accepted by the relay (it answers a good hello with a presence frame). */
+function up(s: FakeSocket, count = 1) {
+  s.onopen!();
+  s.onmessage!({ data: JSON.stringify({ type: "presence", count }) });
+}
+
 function setup(extra: Partial<ConnectionOptions> = {}, messages: Array<string | ArrayBuffer> = []) {
   mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const sockets: FakeSocket[] = [];
@@ -22,6 +28,7 @@ function setup(extra: Partial<ConnectionOptions> = {}, messages: Array<string | 
   const conn = new RoomConnection({
     url: "wss://relay/ws/x",
     role: "host",
+    token: "test-token",
     onMessage: (d) => messages.push(d),
     random: () => 0.5, // jitter factor 1.0
     onResume: (cb) => { resumeCbs.push(cb); return () => { resumeCbs.length = 0; }; },
@@ -39,7 +46,7 @@ test("connects, reports status and presence", () => {
   const { conn, sockets, statuses, presence } = setup();
   conn.start();
   assert.deepEqual(statuses, ["connecting"]);
-  sockets[0].onopen!();
+  up(sockets[0]);
   sockets[0].onmessage!({ data: JSON.stringify({ type: "presence", count: 2 }) });
   assert.equal(statuses.at(-1), "open");
   assert.equal(presence.at(-1), 2);
@@ -50,7 +57,7 @@ test("connects, reports status and presence", () => {
 test("reconnects with backoff after close, resets after open", () => {
   const { conn, sockets, statuses } = setup();
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   sockets[0].onclose!();
   assert.equal(statuses.at(-1), "reconnecting");
   mock.timers.tick(499);
@@ -62,7 +69,7 @@ test("reconnects with backoff after close, resets after open", () => {
   assert.equal(sockets.length, 2);
   mock.timers.tick(1);
   assert.equal(sockets.length, 3);
-  sockets[2].onopen!();
+  up(sockets[2]);
   sockets[2].onclose!(); // attempts reset: back to 500ms
   mock.timers.tick(500);
   assert.equal(sockets.length, 4);
@@ -84,7 +91,7 @@ test("duplicate error+close events cause one reconnect", () => {
 test("heartbeat pings; silent link is dropped and reconnected", () => {
   const { conn, sockets } = setup();
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   mock.timers.tick(1000);
   assert.deepEqual(sockets[0].sent.slice(1), ["ping"]);
   sockets[0].onmessage!({ data: "pong" });
@@ -101,7 +108,7 @@ test("heartbeat pings; silent link is dropped and reconnected", () => {
 test("stop prevents reconnect and zeroes presence", () => {
   const { conn, sockets, statuses, presence } = setup();
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   conn.stop();
   assert.equal(statuses.at(-1), "closed");
   assert.equal(presence.at(-1), 0);
@@ -113,12 +120,12 @@ test("stop prevents reconnect and zeroes presence", () => {
 test("announces its role on every connect", () => {
   const { conn, sockets } = setup();
   conn.start();
-  sockets[0].onopen!();
-  assert.deepEqual(JSON.parse(sockets[0].sent[0]), { type: "hello", role: "host" });
+  up(sockets[0]);
+  assert.deepEqual(JSON.parse(sockets[0].sent[0]), { type: "hello", role: "host", token: "test-token" });
   sockets[0].onclose!();
   mock.timers.tick(500);
-  sockets[1].onopen!();
-  assert.deepEqual(JSON.parse(sockets[1].sent[0]), { type: "hello", role: "host" });
+  up(sockets[1]);
+  assert.deepEqual(JSON.parse(sockets[1].sent[0]), { type: "hello", role: "host", token: "test-token" });
   conn.stop();
   mock.timers.reset();
 });
@@ -126,7 +133,7 @@ test("announces its role on every connect", () => {
 test("resume: healthy link is kept, stale link reconnects immediately", () => {
   const { conn, sockets, resume } = setup();
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   resume();
   assert.equal(sockets.length, 1); // seen just now: leave it alone
   mock.timers.tick(900); // timers were frozen; link may be dead
@@ -170,7 +177,7 @@ test("a factory that throws is retried, not fatal", () => {
 test("late messages from a replaced socket are ignored", () => {
   const { conn, sockets, presence } = setup();
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   const stale = sockets[0].onmessage!;
   sockets[0].onclose!();
   mock.timers.tick(500);
@@ -195,7 +202,7 @@ test("send: false until open, then writes to the socket", () => {
   assert.equal(conn.send("x"), false); // not started
   conn.start();
   assert.equal(conn.send("x"), false); // connecting
-  sockets[0].onopen!();
+  up(sockets[0]);
   assert.equal(conn.send("hello"), true);
   assert.equal(sockets[0].sent.at(-1), "hello");
   sockets[0].onclose!();
@@ -207,7 +214,7 @@ test("send: false until open, then writes to the socket", () => {
 test("send reports false if the socket throws", () => {
   const { conn, sockets } = setup();
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   sockets[0].send = () => { throw new Error("closing"); };
   assert.equal(conn.send("x"), false);
   conn.stop();
@@ -218,12 +225,88 @@ test("peer frames reach onMessage; presence and pong do not", () => {
   const messages: Array<string | ArrayBuffer> = [];
   const { conn, sockets } = setup({}, messages);
   conn.start();
-  sockets[0].onopen!();
+  up(sockets[0]);
   sockets[0].onmessage!({ data: "pong" });
   sockets[0].onmessage!({ data: JSON.stringify({ type: "presence", count: 2 }) });
   sockets[0].onmessage!({ data: JSON.stringify({ type: "text", id: "a", text: "hi", ts: 1 }) });
   assert.equal(messages.length, 1);
   assert.match(String(messages[0]), /"text":"hi"/);
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("relay notices (queued/delivered/rejected) go to onNotice, not onMessage or onPresence", () => {
+  const notices: unknown[] = [];
+  const messages: Array<string | ArrayBuffer> = [];
+  const { conn, sockets, presence } = setup({ onNotice: (m) => notices.push(m) }, messages);
+  conn.start();
+  up(sockets[0]);
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "queued", id }) });
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "delivered", id }) });
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "rejected", id, reason: "queue-full" }) });
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "presence", count: 2 }) });
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "ack", id, copied: true }) }); // a peer message
+  assert.deepEqual(notices, [
+    { type: "queued", id },
+    { type: "delivered", id },
+    { type: "rejected", id, reason: "queue-full" },
+  ]);
+  assert.equal(presence.at(-1), 2);
+  assert.equal(messages.length, 1);
+  assert.match(String(messages[0]), /"ack"/);
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("the proof of membership is re-sent on every reconnect", () => {
+  const { conn, sockets } = setup({ token: "proof-123" });
+  conn.start();
+  up(sockets[0]);
+  sockets[0].onclose!();
+  mock.timers.tick(500);
+  up(sockets[1]);
+  assert.equal(JSON.parse(sockets[1].sent[0]).token, "proof-123");
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("not open until the relay accepts the hello; nothing can be sent before that", () => {
+  const { conn, sockets, statuses } = setup();
+  conn.start();
+  sockets[0].onopen!(); // TCP/WebSocket is up, but the relay hasn't verified our proof yet
+  assert.notEqual(statuses.at(-1), "open");
+  assert.equal(JSON.parse(sockets[0].sent[0]).type, "hello");
+  assert.equal(conn.send("too early"), false); // would be silently dropped by the relay
+  assert.ok(!sockets[0].sent.includes("too early"));
+  sockets[0].onmessage!({ data: JSON.stringify({ type: "presence", count: 1 }) });
+  assert.equal(statuses.at(-1), "open");
+  assert.equal(conn.send("now fine"), true);
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("a socket the relay never accepts never becomes open (bad proof: relay closes it)", () => {
+  const { conn, sockets, statuses } = setup();
+  conn.start();
+  sockets[0].onopen!();
+  sockets[0].onclose!(); // relay closed with 1008
+  assert.ok(!statuses.includes("open"));
+  assert.equal(statuses.at(-1), "reconnecting");
+  conn.stop();
+  mock.timers.reset();
+});
+
+test("after a reconnect the new socket must be accepted again before sending", () => {
+  const { conn, sockets } = setup();
+  conn.start();
+  up(sockets[0]);
+  sockets[0].onclose!();
+  mock.timers.tick(500);
+  sockets[1].onopen!();
+  assert.equal(conn.send("early"), false);
+  sockets[1].onmessage!({ data: JSON.stringify({ type: "presence", count: 1 }) });
+  assert.equal(conn.send("ok"), true);
   conn.stop();
   mock.timers.reset();
 });

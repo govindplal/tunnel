@@ -2,12 +2,22 @@
 import { useState } from "react";
 import type { Clip } from "@/lib/clips-core";
 
-export function ClipList({ clips, onClear }: { clips: Clip[]; onClear: () => void }) {
+export function ClipList({
+  clips,
+  onClear,
+  onCopied,
+}: {
+  clips: Clip[];
+  onClear: () => void;
+  /** called after the user copies a clip by hand */
+  onCopied?: (clip: Clip) => void;
+}) {
   const [flash, setFlash] = useState<string | null>(null);
 
   async function copy(c: Clip) {
     try {
       await navigator.clipboard.writeText(c.text);
+      onCopied?.(c);
       setFlash(c.id);
       setTimeout(() => setFlash((f) => (f === c.id ? null : f)), 1500);
     } catch {

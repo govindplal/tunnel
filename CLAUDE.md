@@ -3,10 +3,10 @@
 Zero-install web bridge between a phone (cellular) and a locked-down corporate laptop (Wi-Fi/VPN, P2P blocked). Phone sends text/files; laptop receives, renders, and stores them. Built to leave no footprint in enterprise tools and avoid DLP flags.
 
 ## Architecture (non-negotiable principles)
-- **Cloud is a stateless relay.** The backend routes WebSocket frames between room members and **never persists** payloads (no disk, no DB, no logs of content). Durable Objects hold only live sockets in memory, no storage.
+- **The cloud is a relay that never logs or reads content.** It forwards WebSocket frames between the two paired devices. The ONE exception, by the user's decision: an end-to-end encrypted text envelope is held in the room's Durable Object for an offline device until that device acknowledges it, and is deleted at once on ack or after 30 minutes (`HOLD_MS`) at the latest. The relay can't read it. Nothing else is ever stored; files are not held (the laptop must be online to receive them). Don't add any other server-side persistence, caching or content logging.
 - **Host (laptop) is the stateful side.** Files live only in the Host browser's IndexedDB, tagged by Room ID. Client (phone) stores nothing but the Room ID.
-- **Room ID** = cryptographically secure random (`crypto.getRandomValues`, >=128 bits), saved in `localStorage` on both devices for auto-resume. Possession of the ID is the only auth, so treat it as a secret: never log it, never put it in analytics.
-- Known accepted risk: the Room ID is in the WebSocket URL path (`/ws/<room>`), so the relay/Cloudflare logs and TLS-inspecting proxies can see it. Possession of it = access to the room. Real fix is end-to-end encryption keyed from the URL fragment; not built yet.
+- **Pairing secret** = 256 random bits, carried only in the QR link's URL fragment (never sent to any server) and saved in `localStorage` on both devices for auto-resume. Everything else is derived from it (`web/src/lib/crypto.ts`): a membership token (proves to the relay you hold the secret), the room name the relay sees (SHA-256 of the token, so the URL path reveals nothing usable), and the AES-GCM key. Treat the secret as the only credential: never log it, never put it in analytics, never put it in a URL path or query.
+- **Known limits of the encryption:** only TEXT is end-to-end encrypted. Files (bytes, names, sizes), acks and progress messages still pass through the relay unencrypted (transient, never stored); a TLS-inspecting proxy or the relay could see them. Encrypting file chunks is a possible next step. A device that sees only the room name can't join, read or consume anything.
 
 ## Built vs still to build
 Pairing, text wormhole, file transfer + stash, and the file viewer (images, PDFs, thumbnails) are built. Protocol and storage details are in `web/src/lib/CLAUDE.md` (client) and `relay-worker/CLAUDE.md` (relay). Still to build:
@@ -26,7 +26,8 @@ Pairing, text wormhole, file transfer + stash, and the file viewer (images, PDFs
 - Never commit secrets; config in `.env` (gitignored), keys documented in `.env.example`.
 
 ## Gotchas
-- Clipboard API needs **HTTPS (secure context)** and, for `readText`, a **user gesture** + permission prompt. Mobile Safari/Chrome differ; test on the real phone. `writeText` on the Host may require the tab to be focused - plan a fallback (visible "copy" button/toast).
+- Clipboard API needs **HTTPS (secure context)** and, for `readText`, a **user gesture** + permission prompt. Mobile Safari/Chrome differ; test on the real phone.
+- **A web page cannot write the clipboard while its tab is unfocused, and cannot run at all with the browser closed** (the user wants no installs, so a background helper/extension is off the table). Design around it, don't fight it: closed laptop = the relay holds the encrypted text and the page syncs on open; unfocused tab = store uncopied, raise a generic desktop alert (never the text itself), mark the tab title, and copy the newest text that arrived THIS session when the tab regains focus or the alert is clicked. Never auto-copy old uncopied clips from earlier sessions: it would silently overwrite what the user has on their clipboard.
 - Corporate proxies may block or idle-kill WebSockets: add heartbeat/ping, auto-reconnect with backoff, and consider a long-poll/SSE fallback. WSS over 443 only.
 - IndexedDB can be evicted/blocked (private mode, storage pressure): call `navigator.storage.persist()` and handle quota errors.
 - Phone tabs get suspended in the background; resume must re-join the room and resync cleanly.

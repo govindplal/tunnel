@@ -1,42 +1,52 @@
-const KEY = "tunnel.room";
-const ROOM_RE = /^[A-Za-z0-9_-]{22,64}$/;
+import { isValidSecret } from "./crypto.ts";
 
-/** 128 random bits as 22 base64url chars. The ID is the only secret: never log it. */
-export function generateRoomId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+// The pairing secret (see crypto.ts) is the only thing stored, in this browser only.
+const KEY = "tunnel.secret";
+
+/** The QR link. The secret rides in the URL fragment so it is never sent to any server. */
+export function buildJoinUrl(origin: string, secret: string): string {
+  return `${origin}/join#${secret}`;
 }
 
-export function isValidRoomId(id: unknown): id is string {
-  return typeof id === "string" && ROOM_RE.test(id);
+export function parseSecretFromHash(hash: string): string | null {
+  const s = hash.replace(/^#/, "");
+  return isValidSecret(s) ? s : null;
 }
 
-/** The ID rides in the URL fragment so it is never sent to any server. */
-export function buildJoinUrl(origin: string, room: string): string {
-  return `${origin}/join#${room}`;
-}
-
-export function parseRoomFromHash(hash: string): string | null {
-  const id = hash.replace(/^#/, "");
-  return isValidRoomId(id) ? id : null;
-}
-
-export function loadRoomId(storage: Pick<Storage, "getItem"> = localStorage): string | null {
+export function loadSecret(storage: Pick<Storage, "getItem"> = localStorage): string | null {
   try {
-    const id = storage.getItem(KEY);
-    return isValidRoomId(id) ? id : null;
+    const s = storage.getItem(KEY);
+    return isValidSecret(s) ? s : null;
   } catch {
     return null;
   }
 }
 
 /** Returns false if storage is blocked (private mode); pairing still works for this tab. */
-export function saveRoomId(id: string, storage: Pick<Storage, "setItem"> = localStorage): boolean {
+export function saveSecret(secret: string, storage: Pick<Storage, "setItem"> = localStorage): boolean {
   try {
-    storage.setItem(KEY, id);
+    storage.setItem(KEY, secret);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+// Remembers that this browser has completed pairing, so the QR code can stay hidden while the
+// phone is simply offline (pairing survives closing either browser).
+const PAIRED_KEY = "tunnel.pairedSecret";
+
+export function markPaired(secret: string, storage: Pick<Storage, "setItem"> = localStorage): void {
+  try {
+    storage.setItem(PAIRED_KEY, secret);
+  } catch {
+    // not remembered: the QR code just stays visible
+  }
+}
+
+export function wasPaired(secret: string, storage: Pick<Storage, "getItem"> = localStorage): boolean {
+  try {
+    return storage.getItem(PAIRED_KEY) === secret;
   } catch {
     return false;
   }

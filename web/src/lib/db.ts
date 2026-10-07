@@ -15,6 +15,7 @@ export interface StoredFile {
 export type TunnelDb = Dexie & {
   clips: EntityTable<Clip, "id">;
   files: EntityTable<StoredFile, "id">;
+  seen: EntityTable<{ id: string; ts: number }, "id">;
 };
 
 let db: TunnelDb | null = null;
@@ -25,6 +26,7 @@ export function getDb(): TunnelDb {
     const d = new Dexie("tunnel") as TunnelDb;
     d.version(1).stores({ clips: "id, ts" });
     d.version(2).stores({ clips: "id, ts", files: "id, ts" });
+    d.version(3).stores({ clips: "id, ts", files: "id, ts", seen: "id, ts" });
     db = d;
   }
   return db;

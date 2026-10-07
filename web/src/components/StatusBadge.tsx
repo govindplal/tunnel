@@ -1,10 +1,21 @@
 import type { Status } from "@/lib/connection";
 
-export function StatusBadge({ status, paired }: { status: Status; paired: boolean }) {
+export function StatusBadge({
+  status,
+  paired,
+  wasPaired = false,
+}: {
+  status: Status;
+  paired: boolean;
+  /** this device was paired before; the other one just isn't connected right now */
+  wasPaired?: boolean;
+}) {
   const [label, dot] = paired
     ? ["Paired", "bg-emerald-500"]
     : status === "open"
-      ? ["Waiting for the other device", "bg-amber-500"]
+      ? wasPaired
+        ? ["Paired (other device not connected right now)", "bg-sky-500"]
+        : ["Waiting for the other device", "bg-amber-500"]
       : status === "closed"
         ? ["Offline", "bg-zinc-400"]
         : ["Connecting…", "bg-amber-500"];

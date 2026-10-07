@@ -1,12 +1,32 @@
 // Messages the relay itself sends (as JSON text). Peer payloads use other shapes.
-export type ServerMessage = { type: "presence"; count: number };
+export type ServerMessage =
+  | { type: "presence"; count: number }
+  /** your message is held: the other device isn't connected right now */
+  | { type: "queued"; id: string }
+  /** the other device has received and stored your held message */
+  | { type: "delivered"; id: string }
+  /** the relay couldn't hold your message (its queue is full) */
+  | { type: "rejected"; id: string; reason: string };
+
+const MSG_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
 
 export function parseServerMessage(data: unknown): ServerMessage | null {
-  if (typeof data !== "string" || data === "pong") return null;
+  if (typeof data !== "string" || data === "pong" || data.length > 512 || !data.startsWith("{")) return null;
   try {
     const m = JSON.parse(data);
-    if (m && m.type === "presence" && Number.isInteger(m.count) && m.count >= 0) {
+    if (!m) return null;
+    if (m.type === "presence" && Number.isInteger(m.count) && m.count >= 0) {
       return { type: "presence", count: m.count };
+    }
+    if (
+      (m.type === "queued" || m.type === "delivered" || m.type === "rejected") &&
+      typeof m.id === "string" && // not just the regex: RegExp.test(undefined) tests the text "undefined"
+      MSG_ID_RE.test(m.id)
+    ) {
+      if (m.type === "rejected") {
+        return { type: "rejected", id: m.id, reason: typeof m.reason === "string" ? m.reason.slice(0, 80) : "rejected" };
+      }
+      return { type: m.type, id: m.id };
     }
   } catch {
     // not JSON: a peer payload, not a server message

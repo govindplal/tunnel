@@ -1,42 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  buildJoinUrl, generateRoomId, isValidRoomId, loadRoomId, parseRoomFromHash, saveRoomId,
-} from "../src/lib/room.ts";
+import { generateSecret, isValidSecret } from "../src/lib/crypto.ts";
+import { buildJoinUrl, loadSecret, parseSecretFromHash, saveSecret } from "../src/lib/room.ts";
 
-test("generateRoomId: 22 url-safe chars, unique", () => {
-  const ids = new Set(Array.from({ length: 200 }, generateRoomId));
-  assert.equal(ids.size, 200);
-  for (const id of ids) assert.match(id, /^[A-Za-z0-9_-]{22}$/);
-});
-
-test("isValidRoomId rejects short, long, and bad chars", () => {
-  assert.equal(isValidRoomId("A".repeat(22)), true);
-  assert.equal(isValidRoomId("short"), false);
-  assert.equal(isValidRoomId("A".repeat(65)), false);
-  assert.equal(isValidRoomId("A".repeat(21) + "!"), false);
-  assert.equal(isValidRoomId(null), false);
-});
-
-test("join URL keeps the room in the fragment and round-trips", () => {
-  const id = generateRoomId();
-  const url = new URL(buildJoinUrl("https://x.example", id));
+test("join URL keeps the secret in the fragment and round-trips", () => {
+  const s = generateSecret();
+  const url = new URL(buildJoinUrl("https://x.example", s));
   assert.equal(url.search, "");
-  assert.equal(parseRoomFromHash(url.hash), id);
-  assert.equal(parseRoomFromHash("#nope"), null);
-  assert.equal(parseRoomFromHash(""), null);
+  assert.equal(url.pathname, "/join");
+  assert.equal(parseSecretFromHash(url.hash), s);
+  assert.equal(parseSecretFromHash("#nope"), null);
+  assert.equal(parseSecretFromHash(""), null);
+  assert.equal(parseSecretFromHash("#" + "A".repeat(42)), null); // wrong length
+  assert.equal(parseSecretFromHash("#" + "A".repeat(44)), null);
+});
+
+test("an old-style room id is not accepted as a secret (existing pairings must re-scan)", () => {
+  assert.equal(isValidSecret("A".repeat(22)), false);
 });
 
 test("storage round-trip and failure tolerance", () => {
   const mem = new Map<string, string>();
   const store = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
-  const id = generateRoomId();
-  saveRoomId(id, store);
-  assert.equal(loadRoomId(store), id);
-  mem.set("tunnel.room", "garbage");
-  assert.equal(loadRoomId(store), null);
+  const s = generateSecret();
+  assert.equal(saveSecret(s, store), true);
+  assert.equal(loadSecret(store), s);
+  mem.set("tunnel.secret", "garbage");
+  assert.equal(loadSecret(store), null);
   const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
-  assert.equal(loadRoomId(broken), null);
-  assert.equal(saveRoomId(id, broken), false);
-  assert.equal(saveRoomId(id, store), true);
+  assert.equal(loadSecret(broken), null);
+  assert.equal(saveSecret(s, broken), false);
 });

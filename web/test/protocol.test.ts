@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseServerMessage } from "../src/lib/protocol.ts";
 
 test("parses presence, ignores everything else", () => {
   assert.deepEqual(parseServerMessage('{"type":"presence","count":2}'), { type: "presence", count: 2 });
@@ -50,4 +49,31 @@ test("worst-case escaped text still fits the frame limit and parses", () => {
   const frame = JSON.stringify({ type: "text", id: "a", text, ts: 1 });
   assert.ok(frame.length <= MAX_FRAME_CHARS);
   assert.equal(parsePeerMessage(frame)?.type, "text");
+});
+
+import { parseServerMessage } from "../src/lib/protocol.ts";
+
+test("parseServerMessage understands queued, delivered and rejected notices", () => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  assert.deepEqual(parseServerMessage(JSON.stringify({ type: "queued", id })), { type: "queued", id });
+  assert.deepEqual(parseServerMessage(JSON.stringify({ type: "delivered", id })), { type: "delivered", id });
+  assert.deepEqual(parseServerMessage(JSON.stringify({ type: "rejected", id, reason: "queue-full" })), {
+    type: "rejected", id, reason: "queue-full",
+  });
+  assert.equal(parseServerMessage(JSON.stringify({ type: "rejected", id }))?.type, "rejected");
+});
+
+test("parseServerMessage rejects notices with bad ids and never mistakes peer messages for notices", () => {
+  assert.equal(parseServerMessage(JSON.stringify({ type: "queued", id: "x" })), null);
+  assert.equal(parseServerMessage(JSON.stringify({ type: "queued" })), null);
+  assert.equal(parseServerMessage(JSON.stringify({ type: "delivered", id: "bad id with spaces!" })), null);
+  assert.equal(parseServerMessage(JSON.stringify({ type: "ack", id: "123e4567-e89b-42d3-a456-426614174000", copied: true })), null);
+  assert.equal(parseServerMessage(JSON.stringify({ type: "msg", id: "123e4567-e89b-42d3-a456-426614174000", iv: "a", ct: "b" })), null);
+  assert.equal(parseServerMessage("x".repeat(600)), null);
+});
+
+test("parseServerMessage rejects a non-string id even if its text would look valid", () => {
+  assert.equal(parseServerMessage('{"type":"delivered","id":12345678}'), null);
+  assert.equal(parseServerMessage('{"type":"queued","id":null}'), null);
+  assert.equal(parseServerMessage('{"type":"queued","id":["abcdefgh"]}'), null);
 });

@@ -1,29 +1,32 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TransferList } from "@/components/TransferList";
 import { useFileOutbox } from "@/hooks/useFileOutbox";
 import { useRoom } from "@/hooks/useRoom";
-import { MAX_FRAME_CHARS, MAX_TEXT_CHARS, newMessageId, parsePeerMessage } from "@/lib/protocol";
-import { loadRoomId, parseRoomFromHash, saveRoomId } from "@/lib/room";
+import { encryptEnvelope } from "@/lib/crypto";
+import { MAX_FRAME_CHARS, MAX_TEXT_CHARS, newMessageId, parsePeerMessage, type ServerMessage } from "@/lib/protocol";
+import { loadSecret, parseSecretFromHash, saveSecret } from "@/lib/room";
+import { reduceTexts, type SentText } from "@/lib/text-state";
 
-type Sent = { id: string; preview: string; state: "sent" | "copied" | "stored" | "unconfirmed" };
-const MAX_SENT = 5;
 const ACK_TIMEOUT_MS = 10_000;
-const STATE_LABEL = {
+const STATE_LABEL: Record<SentText["state"], string> = {
   sent: "sent…",
+  queued: "waiting for the computer to open Tunnel (held, encrypted, for up to 30 minutes)",
+  received: "received by the computer",
   copied: "copied on computer",
-  stored: "received (tap Copy on computer)",
-  unconfirmed: "not confirmed: check the computer, or send again",
+  stored: "received by the computer (not copied yet: it is in the list on the computer)",
+  rejected: "not delivered: the computer couldn't accept it (its offline hold queue is full, or it couldn't be read)",
+  unconfirmed: "no word yet: the computer may be reconnecting. If it was reachable the text is held for up to 30 minutes, so avoid sending it again",
 };
 
-/** Client (phone): joins the room from the QR link and sends text to the host. */
+/** Client (phone): joins from the QR link and sends text and files to the host. */
 export default function JoinPage() {
-  const [room, setRoom] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<Sent[]>([]);
+  const [sent, dispatch] = useReducer(reduceTexts, [] as SentText[]);
 
   // The outbox needs `send` from useRoom, which needs this handler: link them through a ref.
   const fileHandler = useRef<(d: string | ArrayBuffer) => boolean>(() => false);
@@ -32,31 +35,36 @@ export default function JoinPage() {
   const onMessage = useCallback((data: string | ArrayBuffer) => {
     if (fileHandler.current(data) || typeof data !== "string") return;
     const m = parsePeerMessage(data);
-    if (m?.type !== "ack") return;
-    setSent((list) =>
-      list.map((s) => (s.id === m.id ? { ...s, state: m.copied ? "copied" : "stored" } : s)),
-    );
+    if (m?.type === "ack") dispatch({ type: "acked", id: m.id, copied: m.copied });
   }, []);
 
-  const { status, paired, send, buffered } = useRoom(room, "client", onMessage);
+  const onNotice = useCallback((m: Exclude<ServerMessage, { type: "presence" }>) => {
+    dispatch({ type: m.type, id: m.id });
+  }, []);
+
+  const { status, paired, send, buffered, key } = useRoom(secret, "client", onMessage, onNotice);
   const outbox = useFileOutbox(send, buffered, paired);
   useEffect(() => {
     fileHandler.current = outbox.handleMessage;
   }, [outbox.handleMessage]);
 
   useEffect(() => {
-    const fromUrl = parseRoomFromHash(window.location.hash);
+    const fromUrl = parseSecretFromHash(window.location.hash);
     if (fromUrl) {
       // Drop the secret from the address bar only once it is safely stored; with
       // storage blocked, keeping the hash lets a reload still rejoin.
-      if (saveRoomId(fromUrl)) history.replaceState(null, "", window.location.pathname);
+      if (saveSecret(fromUrl)) history.replaceState(null, "", window.location.pathname);
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRoom(fromUrl ?? loadRoomId());
+    setSecret(fromUrl ?? loadSecret());
     setChecked(true);
   }, []);
 
-  function sendText(text: string): boolean {
+  // Text can be sent whenever the relay is reachable: if the computer isn't connected the relay
+  // holds the (encrypted) message for it. Files need the computer online.
+  const canSendText = status === "open" && key !== null;
+
+  async function sendText(text: string): Promise<boolean> {
     if (!text.trim()) {
       setError("Nothing to send: the text is empty.");
       return false;
@@ -65,25 +73,24 @@ export default function JoinPage() {
       setError(`Too long (${text.length.toLocaleString()} characters; max ${MAX_TEXT_CHARS.toLocaleString()}).`);
       return false;
     }
+    if (!key) {
+      setError("Still setting up. Try again in a moment.");
+      return false;
+    }
     const id = newMessageId();
-    const frame = JSON.stringify({ type: "text", id, text, ts: Date.now() });
-    if (frame.length > MAX_FRAME_CHARS) {
+    const payload = JSON.stringify({ type: "text", id, text, ts: Date.now() });
+    if (payload.length > MAX_FRAME_CHARS) {
       setError("Too long once encoded (lots of special characters). Send it in smaller pieces.");
       return false;
     }
+    const frame = await encryptEnvelope(key, id, payload);
     if (!send(frame)) {
-      setError('Not connected yet. Wait for "Paired" and try again.');
+      setError("Not connected yet. Try again in a moment.");
       return false;
     }
     setError(null);
-    setSent((list) => [{ id, preview: text.slice(0, 80), state: "sent" as const }, ...list].slice(0, MAX_SENT));
-    setTimeout(
-      () =>
-        setSent((list) =>
-          list.map((s) => (s.id === id && s.state === "sent" ? { ...s, state: "unconfirmed" as const } : s)),
-        ),
-      ACK_TIMEOUT_MS,
-    );
+    dispatch({ type: "add", id, preview: text.slice(0, 80) });
+    setTimeout(() => dispatch({ type: "timeout", id }), ACK_TIMEOUT_MS);
     return true;
   }
 
@@ -95,20 +102,26 @@ export default function JoinPage() {
       setError("Couldn't read the clipboard (permission denied or unsupported). Paste into the box below and press Send.");
       return;
     }
-    sendText(text);
+    await sendText(text);
   }
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-5 p-6 text-center">
       <h1 className="text-2xl font-semibold">Tunnel</h1>
-      {!checked ? null : !room ? (
+      {!checked ? null : !secret ? (
         <p className="text-zinc-600 dark:text-zinc-400">No pairing found. Scan the QR code shown on your computer.</p>
       ) : (
         <>
-          <StatusBadge status={status} paired={paired} />
+          <StatusBadge status={status} paired={paired} wasPaired />
+          {status === "open" && !paired && (
+            <p className="text-xs text-zinc-500">
+              The computer isn&apos;t connected. Text you send is held (encrypted) for up to 30 minutes and delivered when
+              it opens Tunnel. Files need the computer to be connected.
+            </p>
+          )}
           <button
             onClick={sendClipboard}
-            disabled={!paired}
+            disabled={!canSendText}
             className="rounded-lg border border-zinc-400 px-4 py-2 disabled:opacity-40 dark:border-zinc-600"
           >
             Send clipboard
@@ -141,8 +154,8 @@ export default function JoinPage() {
               className="w-full rounded-lg border border-zinc-300 bg-transparent p-3 text-sm dark:border-zinc-700"
             />
             <button
-              onClick={() => sendText(draft) && setDraft("")}
-              disabled={!paired || !draft}
+              onClick={async () => (await sendText(draft)) && setDraft("")}
+              disabled={!canSendText || !draft}
               className="self-end rounded-lg border border-zinc-400 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-600"
             >
               Send text

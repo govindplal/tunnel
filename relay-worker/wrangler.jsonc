@@ -7,7 +7,7 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "vars": {
-    "ALLOWED_ORIGINS": "http://localhost:3000",
+    "ALLOWED_ORIGINS": "http://localhost:3000,https://tunnel-govindplals-projects.vercel.app",
     "MAX_MESSAGE_BYTES": "1048576"
   }
 }

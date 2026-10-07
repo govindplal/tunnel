@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileReceiver } from "@/lib/file-transfer";
 import { FileStore } from "@/lib/file-store";
 import { parseFileMessage } from "@/lib/file-protocol";
-import { clearFiles, deleteFile, listFiles, saveFile } from "@/lib/files";
+import { clearFiles, deleteFile, listFiles, saveFile, saveThumb } from "@/lib/files";
+import { SerialQueue } from "@/lib/serial-queue";
 import { createKeyedThrottle } from "@/lib/throttle";
+import { makeThumbnail } from "@/lib/thumbs";
 import type { FileMeta } from "@/lib/files-core";
 
 type Send = (data: string | Uint8Array) => boolean;
@@ -12,14 +14,24 @@ type Send = (data: string | Uint8Array) => boolean;
 const PROGRESS_REPORT_MS = 1000;
 
 /** Host side of file casting: receives chunks, stores files, acks the phone. */
-export function useFileInbox(send: Send, paired: boolean) {
+export function useFileInbox(
+  send: Send,
+  paired: boolean,
+  /**
+   * Called once a received file is safely stored (e.g. to open it in the viewer). Pass a STABLE
+   * function (useCallback): a new identity rebuilds the receiver and drops in-flight transfers.
+   */
+  onStored?: (f: { id: string; name: string; mime: string }) => void,
+) {
   const [files, setFiles] = useState<FileMeta[]>([]);
   const [incoming, setIncoming] = useState<Record<string, number>>({});
+  const thumbQueue = useMemo(() => new SerialQueue(), []);
   const store = useMemo(
     () =>
       new FileStore({
         list: listFiles,
         save: (f, ts) => saveFile({ id: f.id, name: f.name, mime: f.mime, size: f.size, ts, blob: f.blob }),
+        setThumb: saveThumb,
         remove: deleteFile,
         clear: clearFiles,
         onChange: setFiles,
@@ -46,6 +58,14 @@ export function useFileInbox(send: Send, paired: boolean) {
         done(f.id);
         const ok = await store.add(f);
         ack(f.id, ok, ok ? undefined : "The computer couldn't save the file (storage full or blocked).");
+        if (!ok) return;
+        onStored?.({ id: f.id, name: f.name, mime: f.mime });
+        // Preview image for the list; made after the ack so it never delays the phone, and one
+        // at a time because each PDF thumbnail starts a PDF.js worker and parses the whole file.
+        void thumbQueue.run(async () => {
+          const t = await makeThumbnail(f.blob, f.mime, f.name);
+          if (t) await store.setThumb(f.id, t);
+        });
       },
       onReject: (id, reason) => {
         report.forget(id);
@@ -66,7 +86,7 @@ export function useFileInbox(send: Send, paired: boolean) {
         }
       },
     });
-  }, [store, ack, done, send]);
+  }, [store, ack, done, send, onStored, thumbQueue]);
 
   useEffect(() => {
     void store.init();

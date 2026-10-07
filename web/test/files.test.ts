@@ -68,6 +68,7 @@ function fakeFileDeps(opts: { failSave?: (id: string) => boolean } = {}) {
         if (opts.failSave?.(f.id)) throw new Error("quota");
         db = [...db.filter((x) => x.id !== f.id), { id: f.id, name: f.name, mime: f.mime, size: f.size, ts }];
       },
+      setThumb: async (id: string, thumb: Blob) => { db = db.map((x) => (x.id === id ? { ...x, thumb } : x)); },
       remove: async (id: string) => { db = db.filter((x) => x.id !== id); },
       clear: async () => { db = []; },
       onChange: (l: FileMeta[]) => { changes.push(l); },
@@ -114,4 +115,16 @@ test("FileReceiver.onAbort fires when the sender cancels", () => {
   rx.handleMessage({ type: "file-abort", id });
   assert.deepEqual(aborted, [id]);
   assert.equal(rx.inFlight, 0);
+});
+
+test("FileStore.setThumb attaches a thumbnail in order, and is a no-op for a deleted file", async () => {
+  const f = fakeFileDeps();
+  const store = new FileStore(f.deps);
+  const thumb = new Blob(["t"]);
+  await Promise.all([store.add(rf("a"), 1), store.setThumb("a", thumb), store.remove("a"), store.setThumb("a", thumb)]);
+  assert.deepEqual(f.db, []); // delete came after the first thumb; the late thumb didn't resurrect it
+  await store.add(rf("b"), 2);
+  await store.setThumb("b", thumb);
+  assert.equal((f.db as FileMeta[])[0].thumb, thumb);
+  assert.equal(f.changes.at(-1)![0].thumb, thumb);
 });

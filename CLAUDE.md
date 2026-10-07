@@ -9,8 +9,7 @@ Zero-install web bridge between a phone (cellular) and a locked-down corporate l
 - Known accepted risk: the Room ID is in the WebSocket URL path (`/ws/<room>`), so the relay/Cloudflare logs and TLS-inspecting proxies can see it. Possession of it = access to the room. Real fix is end-to-end encryption keyed from the URL fragment; not built yet.
 
 ## Built vs still to build
-Pairing, text wormhole, and file transfer + stash are built. Protocol and storage details are in `web/src/lib/CLAUDE.md` (client) and `relay-worker/CLAUDE.md` (relay). Still to build:
-- **File viewing:** Host renders received files (PDF.js for PDFs, `<img>`/canvas for media) and shows thumbnails in a "Stash" sidebar.
+Pairing, text wormhole, file transfer + stash, and the file viewer (images, PDFs, thumbnails) are built. Protocol and storage details are in `web/src/lib/CLAUDE.md` (client) and `relay-worker/CLAUDE.md` (relay). Still to build:
 - **Reverse sync:** Client requests a stashed file; Host reads IndexedDB and streams it back.
 
 ## Stack (decided)

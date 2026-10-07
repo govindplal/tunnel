@@ -1,12 +1,17 @@
 "use client";
 import { useState } from "react";
+import { useBlobUrl } from "@/hooks/useBlobUrl";
 import { getFile } from "@/lib/files";
 import { formatBytes, type FileMeta } from "@/lib/files-core";
+import { viewKind } from "@/lib/viewer-core";
 
 interface Props {
   files: FileMeta[];
   /** transfers in progress: id -> percent */
   incoming: Record<string, number>;
+  /** the file currently open in the viewer, if any */
+  openId: string | null;
+  onOpen: (id: string) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
 }
@@ -24,7 +29,24 @@ async function download(meta: FileMeta): Promise<boolean> {
   return true;
 }
 
-export function FileList({ files, incoming, onRemove, onClear }: Props) {
+const btn = "rounded-md border border-zinc-300 px-3 py-1 text-sm text-inherit dark:border-zinc-700";
+const LABEL = { image: "IMG", pdf: "PDF", none: "FILE" } as const;
+
+function Thumb({ file }: { file: FileMeta }) {
+  const url = useBlobUrl(file.thumb);
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-zinc-100 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- a local blob URL; next/image can't optimize it
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        LABEL[viewKind(file.mime, file.name)]
+      )}
+    </div>
+  );
+}
+
+export function FileList({ files, incoming, openId, onOpen, onRemove, onClear }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const receiving = Object.values(incoming);
   if (files.length === 0 && receiving.length === 0) {
@@ -48,28 +70,37 @@ export function FileList({ files, incoming, onRemove, onClear }: Props) {
           </li>
         ))}
         {files.map((f) => (
-          <li key={f.id} className="rounded-lg border border-zinc-300 p-3 dark:border-zinc-700">
-            <div className="break-words text-sm font-medium">{f.name}</div>
-            <div className="mt-2 flex items-center justify-between gap-2 text-xs text-zinc-500">
-              <span>
-                {formatBytes(f.size)} · {new Date(f.ts).toLocaleTimeString()}
-              </span>
-              <span className="flex gap-2">
-                <button
-                  onClick={async () =>
-                    setNotice((await download(f)) ? null : `"${f.name}" is no longer stored on this computer.`)
-                  }
-                  className="rounded-md border border-zinc-300 px-3 py-1 text-sm text-inherit dark:border-zinc-700"
-                >
-                  Download
+          <li
+            key={f.id}
+            className={`rounded-lg border p-3 ${f.id === openId ? "border-zinc-500 dark:border-zinc-400" : "border-zinc-300 dark:border-zinc-700"}`}
+          >
+            <div className="flex gap-3">
+              <Thumb file={f} />
+              <div className="min-w-0 flex-1">
+                <div className="break-words text-sm font-medium">{f.name}</div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  {formatBytes(f.size)} · {new Date(f.ts).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+            <div className="mt-2 flex justify-end gap-2">
+              {viewKind(f.mime, f.name) !== "none" && (
+                <button onClick={() => onOpen(f.id)} className={btn} aria-label={`View ${f.name}`}>
+                  {f.id === openId ? "Viewing" : "View"}
                 </button>
-                <button
-                  onClick={() => onRemove(f.id)}
-                  className="rounded-md border border-zinc-300 px-3 py-1 text-sm text-inherit dark:border-zinc-700"
-                >
-                  Delete
-                </button>
-              </span>
+              )}
+              <button
+                onClick={async () =>
+                  setNotice((await download(f)) ? null : `"${f.name}" is no longer stored on this computer.`)
+                }
+                className={btn}
+                aria-label={`Download ${f.name}`}
+              >
+                Download
+              </button>
+              <button onClick={() => onRemove(f.id)} className={btn} aria-label={`Delete ${f.name}`}>
+                Delete
+              </button>
             </div>
           </li>
         ))}

@@ -8,6 +8,8 @@ export interface StoredFile {
   size: number;
   ts: number;
   blob: Blob;
+  /** small preview image, generated after the file arrives (absent until then, or if unsupported) */
+  thumb?: Blob;
 }
 
 export type TunnelDb = Dexie & {

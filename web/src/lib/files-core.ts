@@ -7,6 +7,7 @@ export interface FileMeta {
   mime: string;
   size: number;
   ts: number;
+  thumb?: Blob;
 }
 
 /**

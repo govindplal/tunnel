@@ -6,6 +6,8 @@ export interface FileStoreDeps {
   list: () => Promise<FileMeta[]>;
   /** Persists the file and evicts beyond the stash limits. Throws if it can't save. */
   save: (f: ReceivedFile, ts: number) => Promise<void>;
+  /** Attaches a thumbnail to a stored file (no-op if the file is gone). */
+  setThumb: (id: string, thumb: Blob) => Promise<void>;
   remove: (id: string) => Promise<void>;
   clear: () => Promise<void>;
   onChange: (list: FileMeta[]) => void;
@@ -38,6 +40,13 @@ export class FileStore {
         await this.refresh();
       })
       .then(() => ok);
+  }
+
+  setThumb(id: string, thumb: Blob): Promise<void> {
+    return this.q.run(async () => {
+      await this.deps.setThumb(id, thumb);
+      await this.refresh();
+    });
   }
 
   remove(id: string): Promise<void> {

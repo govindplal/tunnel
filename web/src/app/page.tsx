@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { ClipList } from "@/components/ClipList";
 import { FileList } from "@/components/FileList";
+import { FileViewer } from "@/components/FileViewer";
 import { useFileInbox } from "@/hooks/useFileInbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useRoom } from "@/hooks/useRoom";
@@ -10,6 +11,7 @@ import { ClipStore } from "@/lib/clip-store";
 import type { Clip } from "@/lib/clips-core";
 import { clearClips, listClips, saveClip } from "@/lib/clips";
 import { parsePeerMessage } from "@/lib/protocol";
+import { viewKind } from "@/lib/viewer-core";
 import { buildJoinUrl, generateRoomId, loadRoomId, saveRoomId } from "@/lib/room";
 
 /** Host (laptop): owns the room, shows the QR code, receives and stores text. */
@@ -52,7 +54,13 @@ export default function HostPage() {
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
-  const inbox = useFileInbox(send, paired);
+  const [openId, setOpenId] = useState<string | null>(null);
+  // A newly received image or PDF opens right away.
+  const onStored = useCallback((f: { id: string; name: string; mime: string }) => {
+    if (viewKind(f.mime, f.name) !== "none") setOpenId(f.id);
+  }, []);
+  const inbox = useFileInbox(send, paired, onStored);
+  const openFile = inbox.files.find((f) => f.id === openId);
   useEffect(() => {
     fileHandler.current = inbox.handleMessage;
   }, [inbox.handleMessage]);
@@ -73,7 +81,7 @@ export default function HostPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-6 p-6 text-center">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center gap-6 p-6 text-center">
       <h1 className="text-2xl font-semibold">Tunnel</h1>
       {!paired && (
         <>
@@ -90,8 +98,16 @@ export default function HostPage() {
         </>
       )}
       <StatusBadge status={status} paired={paired} />
+      {openFile && <FileViewer file={openFile} onClose={() => setOpenId(null)} />}
       <ClipList clips={clips} onClear={() => void store.clear()} />
-      <FileList files={inbox.files} incoming={inbox.incoming} onRemove={inbox.remove} onClear={inbox.clear} />
+      <FileList
+        files={inbox.files}
+        incoming={inbox.incoming}
+        openId={openFile?.id ?? null}
+        onOpen={setOpenId}
+        onRemove={inbox.remove}
+        onClear={inbox.clear}
+      />
       <button onClick={newRoom} className="text-sm underline text-zinc-600 dark:text-zinc-400">
         Start a new pairing
       </button>

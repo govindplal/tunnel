@@ -1,32 +1,14 @@
 @import "tailwindcss";
 
-/* Tunnel palette: warm paper, plum ink, and four candy accents. Everything is drawn as line art. */
+/* Tunnel palette: beige paper, black ink. One theme, no dark mode. */
 :root {
-  --paper: #fff6ec;
-  --paper-2: #ffeadb;
-  --ink: #3b2a4a;
-  --muted: #7c6a8c;
-  --line: #3b2a4a;
-  --coral: #ff7a6b;
-  --mint: #4fc3a1;
-  --butter: #f2b035;
-  --lilac: #9b86e8;
-  --danger: #d6455d;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #241a30;
-    --paper-2: #2f2340;
-    --ink: #f7ebff;
-    --muted: #b8a6cc;
-    --line: #e6d4f5;
-    --coral: #ff8f80;
-    --mint: #6fe0bd;
-    --butter: #ffd166;
-    --lilac: #b8a4f0;
-    --danger: #ff8aa0;
-  }
+  color-scheme: light;
+  --paper: #f1e7d3;
+  --paper-2: #e6d9bf;
+  --ink: #111111;
+  --muted: #4a4338;
+  --line: #111111;
+  --danger: #a3262a;
 }
 
 @theme inline {
@@ -35,10 +17,6 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
-  --color-coral: var(--coral);
-  --color-mint: var(--mint);
-  --color-butter: var(--butter);
-  --color-lilac: var(--lilac);
   --color-danger: var(--danger);
   --font-sans: var(--font-nunito);
   --font-display: var(--font-fredoka);
@@ -58,21 +36,21 @@ h3 {
 }
 
 ::selection {
-  background: var(--butter);
-  color: #3b2a4a;
+  background: var(--ink);
+  color: var(--paper);
 }
 
 :focus-visible {
-  outline: 3px solid var(--lilac);
+  outline: 3px solid var(--ink);
   outline-offset: 2px;
   border-radius: 8px;
 }
 
 progress {
-  accent-color: var(--coral);
+  accent-color: var(--ink);
 }
 
-/* A chunky outlined button with a hard offset shadow that "presses" in on click. */
+/* An outlined pill button; the primary one is filled black. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -80,24 +58,18 @@ progress {
   gap: 0.4rem;
   border: 2px solid var(--line);
   border-radius: 999px;
-  background: var(--paper);
+  background: transparent;
   color: var(--ink);
   padding: 0.3rem 0.9rem;
   font-size: 0.875rem;
   font-weight: 700;
-  box-shadow: 0 3px 0 var(--line);
   transition:
-    transform 0.08s,
-    box-shadow 0.08s,
-    background 0.15s;
+    background 0.15s,
+    color 0.15s;
   cursor: pointer;
 }
 .btn:hover:not(:disabled) {
   background: var(--paper-2);
-}
-.btn:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow: 0 0 0 var(--line);
 }
 .btn:disabled {
   opacity: 0.4;
@@ -106,91 +78,25 @@ progress {
 .btn-big {
   padding: 0.55rem 1.4rem;
   font-size: 1rem;
-  background: var(--coral);
-  color: #3b2a4a;
+  background: var(--ink);
+  color: var(--paper);
 }
 .btn-big:hover:not(:disabled) {
-  background: var(--coral);
-  filter: brightness(1.06);
+  background: var(--ink);
+  opacity: 0.85;
 }
 
-/* Outlined panels with a soft offset "sketch" shadow. */
 .card {
   border: 2px solid var(--line);
   border-radius: 1.25rem;
-  background: var(--paper);
-  box-shadow: 4px 4px 0 var(--lilac);
+  background: transparent;
 }
 
 .link {
   text-decoration: underline;
-  text-decoration-style: wavy;
-  text-decoration-color: var(--coral);
   text-underline-offset: 4px;
   color: var(--muted);
 }
 .link:hover {
   color: var(--ink);
-}
-
-@keyframes bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-@keyframes twinkle {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.9);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-}
-@keyframes flow {
-  to {
-    stroke-dashoffset: -24;
-  }
-}
-@keyframes blink {
-  0%,
-  92%,
-  100% {
-    transform: scaleY(1);
-  }
-  96% {
-    transform: scaleY(0.1);
-  }
-}
-.bob {
-  animation: bob 3.2s ease-in-out infinite;
-}
-.twinkle {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: twinkle 3s ease-in-out infinite;
-}
-.flow {
-  stroke-dasharray: 6 6;
-  animation: flow 1.2s linear infinite;
-}
-.blink {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: blink 5s infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bob,
-  .twinkle,
-  .flow,
-  .blink {
-    animation: none;
-  }
 }

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, Geist_Mono, Nunito } from "next/font/google";
-import { Doodles } from "@/components/art";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -24,10 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fff6ec" },
-    { media: "(prefers-color-scheme: dark)", color: "#241a30" },
-  ],
+  themeColor: "#f1e7d3",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -36,8 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${nunito.variable} ${fredoka.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="relative min-h-full flex flex-col">
-        <Doodles />
+      <body className="min-h-full flex flex-col">
         {children}
       </body>
     </html>

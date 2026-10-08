@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Mascot } from "@/components/art";
+import { Tunnel } from "@/components/art";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TransferList } from "@/components/TransferList";
 import { useFileOutbox } from "@/hooks/useFileOutbox";
@@ -108,7 +108,7 @@ export default function JoinPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-5 p-6 text-center">
-      <Mascot className="bob h-20 w-24" />
+      <Tunnel className="h-20 w-28" />
       <h1 className="text-4xl font-semibold tracking-tight">Tunnel</h1>
       {!checked ? null : !secret ? (
         <p className="text-muted">No pairing found. Scan the QR code shown on your computer.</p>

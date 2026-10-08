@@ -72,7 +72,7 @@ export function FileList({ files, incoming, openId, onOpen, onRemove, onClear }:
         {files.map((f) => (
           <li
             key={f.id}
-            className={`card p-3 ${f.id === openId ? "!border-coral" : ""}`}
+            className={`card p-3 ${f.id === openId ? "!border-4" : ""}`}
           >
             <div className="flex gap-3">
               <Thumb file={f} />

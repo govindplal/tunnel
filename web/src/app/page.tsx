@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { About } from "@/components/About";
-import { ArrowDown, Mascot } from "@/components/art";
+import { Tunnel } from "@/components/art";
 import { AlertsToggle } from "@/components/AlertsToggle";
 import { ClipList } from "@/components/ClipList";
 import { FileList } from "@/components/FileList";
@@ -146,14 +146,14 @@ export default function HostPage() {
   return (
     <>
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center gap-6 p-6 text-center">
-      <Mascot className="bob h-24 w-28" />
+      <Tunnel className="h-24 w-32" />
       <h1 className="text-4xl font-semibold tracking-tight">Tunnel</h1>
       {qrVisible && (
         <>
           <p className="text-muted">
             Scan this code with your phone to pair it with this computer.
           </p>
-          <div className="card bg-white p-4">
+          <div className="card p-4">
             {secret ? (
               <QRCodeSVG value={buildJoinUrl(window.location.origin, secret)} size={200} />
             ) : (
@@ -197,7 +197,7 @@ export default function HostPage() {
       </button>
       <a href="#about" className="mt-2 flex flex-col items-center gap-1 text-sm font-semibold text-muted hover:text-ink">
         What is Tunnel?
-        <ArrowDown className="bob h-6 w-6" />
+        <span aria-hidden>↓</span>
       </a>
     </main>
     <About />

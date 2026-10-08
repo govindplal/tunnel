@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { About } from "@/components/About";
+import { ArrowDown, Mascot } from "@/components/art";
 import { AlertsToggle } from "@/components/AlertsToggle";
 import { ClipList } from "@/components/ClipList";
 import { FileList } from "@/components/FileList";
@@ -142,14 +144,16 @@ export default function HostPage() {
   const qrVisible = !everPaired || showQr;
 
   return (
+    <>
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center gap-6 p-6 text-center">
-      <h1 className="text-2xl font-semibold">Tunnel</h1>
+      <Mascot className="bob h-24 w-28" />
+      <h1 className="text-4xl font-semibold tracking-tight">Tunnel</h1>
       {qrVisible && (
         <>
-          <p className="text-zinc-600 dark:text-zinc-400">
+          <p className="text-muted">
             Scan this code with your phone to pair it with this computer.
           </p>
-          <div className="rounded-2xl bg-white p-4">
+          <div className="card bg-white p-4">
             {secret ? (
               <QRCodeSVG value={buildJoinUrl(window.location.origin, secret)} size={200} />
             ) : (
@@ -160,7 +164,7 @@ export default function HostPage() {
       )}
       <StatusBadge status={status} paired={paired} wasPaired={everPaired} />
       {storageProblem && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           This browser couldn&apos;t save the latest text (storage is blocked or full). It is shown below and still held for
           you, but keep this tab open until you have used it.
         </p>
@@ -168,7 +172,7 @@ export default function HostPage() {
       {everPaired && (
         <button
           onClick={() => setShowQr((v) => !v)}
-          className="text-sm underline text-zinc-600 dark:text-zinc-400"
+          className="text-sm link"
         >
           {showQr ? "Hide pairing code" : "Show pairing code"}
         </button>
@@ -188,9 +192,15 @@ export default function HostPage() {
         onRemove={inbox.remove}
         onClear={inbox.clear}
       />
-      <button onClick={newPairing} className="text-sm underline text-zinc-600 dark:text-zinc-400">
+      <button onClick={newPairing} className="text-sm link">
         Start a new pairing
       </button>
+      <a href="#about" className="mt-2 flex flex-col items-center gap-1 text-sm font-semibold text-muted hover:text-ink">
+        What is Tunnel?
+        <ArrowDown className="bob h-6 w-6" />
+      </a>
     </main>
+    <About />
+    </>
   );
 }

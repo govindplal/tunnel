@@ -1,26 +1,196 @@
 @import "tailwindcss";
 
+/* Tunnel palette: warm paper, plum ink, and four candy accents. Everything is drawn as line art. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --paper: #fff6ec;
+  --paper-2: #ffeadb;
+  --ink: #3b2a4a;
+  --muted: #7c6a8c;
+  --line: #3b2a4a;
+  --coral: #ff7a6b;
+  --mint: #4fc3a1;
+  --butter: #f2b035;
+  --lilac: #9b86e8;
+  --danger: #d6455d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #241a30;
+    --paper-2: #2f2340;
+    --ink: #f7ebff;
+    --muted: #b8a6cc;
+    --line: #e6d4f5;
+    --coral: #ff8f80;
+    --mint: #6fe0bd;
+    --butter: #ffd166;
+    --lilac: #b8a4f0;
+    --danger: #ff8aa0;
   }
 }
 
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-coral: var(--coral);
+  --color-mint: var(--mint);
+  --color-butter: var(--butter);
+  --color-lilac: var(--lilac);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-nunito);
+  --font-display: var(--font-fredoka);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-nunito), system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-fredoka), var(--font-nunito), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--butter);
+  color: #3b2a4a;
+}
+
+:focus-visible {
+  outline: 3px solid var(--lilac);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+progress {
+  accent-color: var(--coral);
+}
+
+/* A chunky outlined button with a hard offset shadow that "presses" in on click. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.3rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  box-shadow: 0 3px 0 var(--line);
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s,
+    background 0.15s;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: var(--paper-2);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--line);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-big {
+  padding: 0.55rem 1.4rem;
+  font-size: 1rem;
+  background: var(--coral);
+  color: #3b2a4a;
+}
+.btn-big:hover:not(:disabled) {
+  background: var(--coral);
+  filter: brightness(1.06);
+}
+
+/* Outlined panels with a soft offset "sketch" shadow. */
+.card {
+  border: 2px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--lilac);
+}
+
+.link {
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--coral);
+  text-underline-offset: 4px;
+  color: var(--muted);
+}
+.link:hover {
+  color: var(--ink);
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@keyframes flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+.bob {
+  animation: bob 3.2s ease-in-out infinite;
+}
+.twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twinkle 3s ease-in-out infinite;
+}
+.flow {
+  stroke-dasharray: 6 6;
+  animation: flow 1.2s linear infinite;
+}
+.blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 5s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bob,
+  .twinkle,
+  .flow,
+  .blink {
+    animation: none;
+  }
 }

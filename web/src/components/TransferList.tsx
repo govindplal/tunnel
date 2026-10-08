@@ -24,15 +24,15 @@ export function TransferList({
   return (
     <ul className="w-full text-left text-sm">
       {transfers.map((t) => (
-        <li key={t.id} className="border-t border-zinc-200 py-2 dark:border-zinc-800">
+        <li key={t.id} className="border-t border-line py-2">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate">{t.name}</span>
-            <span className="shrink-0 text-xs text-zinc-500">{formatBytes(t.size)}</span>
+            <span className="shrink-0 text-xs text-muted">{formatBytes(t.size)}</span>
           </div>
           {t.state === "sending" && <progress className="mt-1 block w-full" value={t.pct} max={100} />}
           {t.state === "waiting" && <progress className="mt-1 block w-full" value={t.arrived ?? 0} max={t.size} />}
-          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-zinc-500">
-            <span className={t.state === "failed" ? "text-red-600 dark:text-red-400" : undefined}>
+          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
+            <span className={t.state === "failed" ? "text-danger" : undefined}>
               {t.state === "failed" && t.error
                 ? `failed: ${t.error}`
                 : t.state === "waiting"

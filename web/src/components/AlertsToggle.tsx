@@ -18,7 +18,7 @@ export function AlertsToggle() {
   if (state === null || state === "unsupported" || state === "granted") return null;
   if (state === "denied") {
     return (
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted">
         Desktop alerts are blocked for this site. Allow notifications in your browser settings to get a click-to-copy alert when
         text arrives while this tab is in the background.
       </p>
@@ -26,7 +26,7 @@ export function AlertsToggle() {
   }
   return (
     <button
-      className="rounded-md border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700"
+      className="btn"
       onClick={() => void Notification.requestPermission().then(setState)}
     >
       Turn on desktop alerts

@@ -8,9 +8,8 @@ import { checkImageBlob, type ImageVerdict } from "@/lib/image-info";
 import { openPdf, renderPage } from "@/lib/pdf";
 import { DEFAULT_ZOOM, clampPage, stepZoom, viewKind } from "@/lib/viewer-core";
 
-const btn =
-  "rounded-md border border-zinc-300 px-3 py-1 text-sm disabled:opacity-40 dark:border-zinc-700";
-const errorText = "p-4 text-sm text-red-600 dark:text-red-400";
+const btn = "btn";
+const errorText = "p-4 text-sm text-danger";
 
 function ImageView({ blob, name }: { blob: Blob; name: string }) {
   // Header check first: a tiny file can declare gigapixel dimensions and freeze the tab on decode.
@@ -40,7 +39,7 @@ function ImageView({ blob, name }: { blob: Blob; name: string }) {
       </p>
     );
   }
-  if (!url) return <p className="p-4 text-sm text-zinc-500">Loading…</p>;
+  if (!url) return <p className="p-4 text-sm text-muted">Loading…</p>;
   // eslint-disable-next-line @next/next/no-img-element -- a local blob URL; next/image can't optimize it
   return <img src={url} alt={name} onError={() => setFailed(true)} className="mx-auto max-h-[70vh] max-w-full object-contain" />;
 }
@@ -92,11 +91,11 @@ function PdfView({ blob, name }: { blob: Blob; name: string }) {
       </p>
     );
   }
-  if (!ready) return <p className="p-4 text-sm text-zinc-500">Loading PDF…</p>;
+  if (!ready) return <p className="p-4 text-sm text-muted">Loading PDF…</p>;
   const current = clampPage(page, ready.pages);
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-center gap-2 border-b border-zinc-200 p-2 text-sm dark:border-zinc-800">
+      <div className="flex flex-wrap items-center justify-center gap-2 border-b border-line p-2 text-sm">
         <button className={btn} onClick={() => setPage(current - 1)} disabled={current <= 1}>
           Previous
         </button>
@@ -113,8 +112,8 @@ function PdfView({ blob, name }: { blob: Blob; name: string }) {
           Page {current} of {ready.pages} · {Math.round(zoom * 100)}%
         </span>
       </div>
-      {clamped && <p className="px-3 py-1 text-xs text-zinc-500">This page is very large, so zoom is limited.</p>}
-      <div className="max-h-[70vh] overflow-auto bg-zinc-100 p-2 dark:bg-zinc-900" tabIndex={0} aria-label="Document page">
+      {clamped && <p className="px-3 py-1 text-xs text-muted">This page is very large, so zoom is limited.</p>}
+      <div className="max-h-[70vh] overflow-auto bg-paper-2 p-2" tabIndex={0} aria-label="Document page">
         <canvas
           ref={canvas}
           role="img"
@@ -149,17 +148,17 @@ export function FileViewer({ file, onClose }: { file: FileMeta; onClose: () => v
   const blob = loaded?.id === file.id ? loaded.blob : undefined; // undefined = still loading
 
   return (
-    <section className="w-full overflow-hidden rounded-lg border border-zinc-300 text-left dark:border-zinc-700" aria-label="File viewer">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+    <section className="card w-full overflow-hidden text-left" aria-label="File viewer">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
         <h2 className="truncate text-sm font-medium">{file.name}</h2>
         <button className={btn} onClick={onClose} aria-label={`Close ${file.name}`}>
           Close
         </button>
       </div>
       {kind === "none" ? (
-        <p className="p-4 text-sm text-zinc-500">No preview for this file type. Use Download.</p>
+        <p className="p-4 text-sm text-muted">No preview for this file type. Use Download.</p>
       ) : blob === undefined ? (
-        <p className="p-4 text-sm text-zinc-500">Loading…</p>
+        <p className="p-4 text-sm text-muted">Loading…</p>
       ) : blob === null ? (
         <p role="alert" className={errorText}>
           This file is no longer stored on this computer.

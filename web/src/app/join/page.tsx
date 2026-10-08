@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Mascot } from "@/components/art";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TransferList } from "@/components/TransferList";
 import { useFileOutbox } from "@/hooks/useFileOutbox";
@@ -107,14 +108,15 @@ export default function JoinPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-5 p-6 text-center">
-      <h1 className="text-2xl font-semibold">Tunnel</h1>
+      <Mascot className="bob h-20 w-24" />
+      <h1 className="text-4xl font-semibold tracking-tight">Tunnel</h1>
       {!checked ? null : !secret ? (
-        <p className="text-zinc-600 dark:text-zinc-400">No pairing found. Scan the QR code shown on your computer.</p>
+        <p className="text-muted">No pairing found. Scan the QR code shown on your computer.</p>
       ) : (
         <>
           <StatusBadge status={status} paired={paired} wasPaired />
           {status === "open" && !paired && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted">
               The computer isn&apos;t connected. Text you send is held (encrypted) for up to 30 minutes and delivered when
               it opens Tunnel. Files need the computer to be connected.
             </p>
@@ -122,7 +124,7 @@ export default function JoinPage() {
           <button
             onClick={sendClipboard}
             disabled={!canSendText}
-            className="rounded-lg border border-zinc-400 px-4 py-2 disabled:opacity-40 dark:border-zinc-600"
+            className="btn btn-big"
           >
             Send clipboard
           </button>
@@ -140,7 +142,7 @@ export default function JoinPage() {
           <button
             onClick={() => fileInput.current?.click()}
             disabled={!paired}
-            className="rounded-lg border border-zinc-400 px-4 py-2 disabled:opacity-40 dark:border-zinc-600"
+            className="btn btn-big"
           >
             Send file
           </button>
@@ -151,27 +153,27 @@ export default function JoinPage() {
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Or type / paste text here"
               rows={4}
-              className="w-full rounded-lg border border-zinc-300 bg-transparent p-3 text-sm dark:border-zinc-700"
+              className="w-full rounded-2xl border-2 border-line bg-paper p-3 text-sm placeholder:text-muted"
             />
             <button
               onClick={async () => (await sendText(draft)) && setDraft("")}
               disabled={!canSendText || !draft}
-              className="self-end rounded-lg border border-zinc-400 px-4 py-2 text-sm disabled:opacity-40 dark:border-zinc-600"
+              className="btn self-end"
             >
               Send text
             </button>
           </div>
           {error && (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
           {sent.length > 0 && (
             <ul className="w-full text-left text-sm">
               {sent.map((s) => (
-                <li key={s.id} className="border-t border-zinc-200 py-2 dark:border-zinc-800">
+                <li key={s.id} className="border-t border-line py-2">
                   <div className="truncate">{s.preview}</div>
-                  <div className="text-xs text-zinc-500">{STATE_LABEL[s.state]}</div>
+                  <div className="text-xs text-muted">{STATE_LABEL[s.state]}</div>
                 </li>
               ))}
             </ul>

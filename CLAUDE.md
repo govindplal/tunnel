@@ -40,3 +40,6 @@ Pairing, text wormhole, file transfer + stash, and the file viewer (images, PDFs
 - **Ship every checkpoint:** after each completed feature or checkpoint (tests/lint green), commit and `git push` to `origin` (github.com/govindplal/tunnel). Vercel auto-deploys `web/` on every push; the user reviews the live site, not localhost. After pushing, confirm the deployment reached READY (Vercel `list_deployments`/`get_deployment` or `vercel ls`) and give the user the live URL. If a build fails, fix it before moving on.
 - Vercel project `tunnel` (team govindplals-projects), root directory `web`. Vercel can't hold WebSockets, so the relay runs on Cloudflare (`tunnel-relay` Worker, https://tunnel-relay.govindplal.workers.dev); stable web URL https://tunnel-govindplals-projects.vercel.app (`ALLOWED_ORIGINS` in `relay-worker/wrangler.jsonc` accepts `*` wildcards, and already covers `tunnel-*-govindplals-projects.vercel.app`; add any other web origin there). Web reads the relay from `NEXT_PUBLIC_RELAY_URL` (set in Vercel env vars).
 - Ask before: adding dependencies, changing the WS protocol, or anything that adds server-side persistence.
+
+## Current status
+@.claude/STATUS.md
